@@ -22,7 +22,8 @@
 #include <rapidjson/error/error.h>
 #include <rapidjson/schema.h>
 #include <rapidjson/stringbuffer.h>
-#include <spdlog/spdlog.h>
+
+#include "logging.hpp"
 
 namespace ovms {
 const std::string MODEL_CONFIG_DEFINITION = R"(
