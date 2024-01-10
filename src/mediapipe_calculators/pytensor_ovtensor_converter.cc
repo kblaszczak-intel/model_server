@@ -76,13 +76,13 @@ public:
             py::object outTensor;
             std::unique_ptr<PyObjectWrapper<py::object>> outputPyTensor = std::make_unique<PyObjectWrapper<py::object>>(outTensor);
             PythonBackend pythonBackend;
-            std::vector<py::ssize_t> shape;
+            std::vector<py::ssize_t> shape;  // ov::Shape is public std::vector<size_t>, therefore line 81 can overflow
             for (const auto& dim : inputTensor.get_shape()) {
                 shape.push_back(dim);
             }
             const auto& options = cc->Options<PyTensorOvTensorConverterCalculatorOptions>();
             const auto tagOutputNameMap = options.tag_to_output_tensor_names();
-            auto outputName = tagOutputNameMap.at("OVMS_PY_TENSOR").c_str();
+            auto outputName = tagOutputNameMap.at("OVMS_PY_TENSOR").c_str();  // missing error handling (Exception) (unit tests only ov::Tensor->py)
             pythonBackend.createOvmsPyTensor(
                 outputName,
                 const_cast<void*>((const void*)inputTensor.data()),
@@ -96,12 +96,12 @@ public:
             auto& inputTensor = cc->Inputs().Tag("OVMS_PY_TENSOR").Get<PyObjectWrapper<py::object>>();
             auto precision = ovmsPrecisionToIE2Precision(fromString(inputTensor.getProperty<std::string>("datatype")));
             ov::Shape shape;
-            for (const auto& dim : inputTensor.getProperty<std::vector<py::ssize_t>>("shape")) {
+            for (const auto& dim : inputTensor.getProperty<std::vector<py::ssize_t>>("shape")) {  // again, size_t/ssize_t mismatch
                 shape.push_back(dim);
             }
             auto data = reinterpret_cast<const void*>(inputTensor.getProperty<void*>("ptr"));
             std::unique_ptr<ov::Tensor> output = std::make_unique<ov::Tensor>(precision, shape);
-            memcpy((*output).data(), const_cast<void*>(data), output->get_byte_size());
+            memcpy((*output).data(), const_cast<void*>(data), output->get_byte_size());  // missing validation of data variable buffer size
             cc->Outputs().Tag("OVTENSOR").Add(output.release(), cc->InputTimestamp());
         }
         LOG(INFO) << "PyTensorOvTensorConverterCalculator [Node: " << cc->NodeName() << "] Process end";

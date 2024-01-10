@@ -842,7 +842,7 @@ Status MediapipeGraphExecutor::infer(const KFSRequest* request, KFSResponse* res
     }
     std::map<std::string, mediapipe::Packet> sideInputPackets{createInputSidePackets(request)};
 #if (PYTHON_DISABLE == 0)
-    sideInputPackets[INPUT_SIDE_PACKET_TAG] = mediapipe::MakePacket<PythonNodeResourcesMap>(this->pythonNodeResourcesMap).At(mediapipe::Timestamp(STARTING_TIMESTAMP));
+    sideInputPackets[INPUT_SIDE_PACKET_TAG] = mediapipe::MakePacket<PythonNodeResourcesMap>(this->pythonNodeResourcesMap).At(mediapipe::Timestamp(STARTING_TIMESTAMP));  // We do not check if INPUT_SIDE_PACKET_TAG already exist in the map (possibly override it)
 #endif
     MP_RETURN_ON_FAIL(graph.StartRun(sideInputPackets), std::string("start MediaPipe graph: ") + request->model_name(), StatusCode::MEDIAPIPE_GRAPH_START_ERROR);
     if (static_cast<int>(this->inputNames.size()) != request->inputs().size()) {
@@ -987,7 +987,7 @@ Status MediapipeGraphExecutor::inferStream(const KFSRequest& firstRequest, ::grp
         // Launch
         std::map<std::string, mediapipe::Packet> inputSidePackets{createInputSidePackets(&firstRequest)};
 #if (PYTHON_DISABLE == 0)
-        inputSidePackets[INPUT_SIDE_PACKET_TAG] = mediapipe::MakePacket<PythonNodeResourcesMap>(this->pythonNodeResourcesMap).At(mediapipe::Timestamp(STARTING_TIMESTAMP));
+        inputSidePackets[INPUT_SIDE_PACKET_TAG] = mediapipe::MakePacket<PythonNodeResourcesMap>(this->pythonNodeResourcesMap).At(mediapipe::Timestamp(STARTING_TIMESTAMP));  // not validated if the key already exist
 #endif
         MP_RETURN_ON_FAIL(graph.StartRun(inputSidePackets), "graph start", StatusCode::MEDIAPIPE_GRAPH_START_ERROR);
 

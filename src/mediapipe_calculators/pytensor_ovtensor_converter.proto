@@ -25,5 +25,5 @@ message PyTensorOvTensorConverterCalculatorOptions {
     // no rule to obtain this
     optional PyTensorOvTensorConverterCalculatorOptions ext = 113473749;
     }
-    map<string, string> tag_to_output_tensor_names = 1;
+    map<string, string> tag_to_output_tensor_names = 1;  // why is it map, if the only key we can have is OVMS_PY_TENSOR?
 }
