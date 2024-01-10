@@ -121,19 +121,20 @@ public:
     }
 };
 
+#if (PYTHON_DISABLE == 0)
 class MediapipePyTensorOvTensorConverterTest : public MediapipeFlowTest {
 public:
     void SetUp() {
         SetUpServer("/ovms/src/test/mediapipe/config_mediapipe_pytensor_ovtensor_converter.json");
     }
 };
-
 class MediapipeOvTensorPyTensorConverterTest : public MediapipeFlowTest {
 public:
     void SetUp() {
         SetUpServer("/ovms/src/test/mediapipe/config_mediapipe_ovtensor_pytensor_converter.json");
     }
 };
+#endif
 
 class MediapipeTfLiteTensorTest : public MediapipeFlowTest {
 public:
@@ -170,6 +171,7 @@ TEST_F(MediapipeFlowKfsTest, Infer) {
     checkAddResponse("out", requestData1, requestData2, request, response, 1, 1, modelName);
 }
 
+#if (PYTHON_DISABLE == 0)
 TEST_F(MediapipePyTensorOvTensorConverterTest, Infer) {
     const ovms::Module* grpcModule = server.getModule(ovms::GRPC_SERVER_MODULE_NAME);
     KFSInferenceServiceImpl& impl = dynamic_cast<const ovms::GRPCServerModule*>(grpcModule)->getKFSGrpcImpl();
@@ -239,6 +241,7 @@ TEST_F(MediapipeOvTensorPyTensorConverterTest, Infer) {
     EXPECT_EQ(0, std::memcmp(actualOutput, expectedOutput, dataLengthToCheck))
         << readableError(expectedOutput, actualOutput, dataLengthToCheck / sizeof(float));
 }
+#endif
 
 TEST_F(MediapipeTFTest, Passthrough) {
     const ovms::Module* grpcModule = server.getModule(ovms::GRPC_SERVER_MODULE_NAME);
