@@ -16,7 +16,7 @@
 load("@bazel_skylib//lib:selects.bzl", "selects")
 load("@mediapipe//mediapipe/framework:more_selects.bzl", "more_selects")
 load("//src:common_settings.bzl",
-     "COMMON_STATIC_LIBS_COPTS", "COMMON_STATIC_LIBS_LINKOPTS", "COMMON_FUZZER_COPTS", "COMMON_FUZZER_LINKOPTS",
+     "COMMON_STATIC_LIBS_COPTS", "COMMON_STATIC_LIBS_LINKOPTS", "COMMON_FUZZER_COPTS", "COMMON_FUZZER_LINKOPTS", "COMMON_LOCAL_DEFINES",
      "create_config_settings")
 
 constraint_setting(name = "linux_distribution_family")
@@ -402,7 +402,7 @@ cc_library(
             "//src:disable_mediapipe" : [],
         }),
     visibility = ["//visibility:public",],
-    local_defines = ["SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE",], # TODO propagate
+    local_defines = COMMON_LOCAL_DEFINES,
     copts = COPTS_ADJUSTED,
     linkopts = LINKOPTS_ADJUSTED,
     data = ["//src/python:pyovms.so"],
@@ -417,8 +417,8 @@ cc_library(
         "@com_github_gabime_spdlog//:spdlog",
         "@com_github_glog_glog//:glog", # used to manage Mediapipe logging
     ],
-    local_defines = ["SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE",],
     visibility = ["//visibility:public",],
+    local_defines = COMMON_LOCAL_DEFINES,
     copts = COPTS_ADJUSTED,
     linkopts = LINKOPTS_ADJUSTED,
     alwayslink = 1,
@@ -430,6 +430,7 @@ cc_library(
     srcs = ["precision.cpp",],
     deps = ["@linux_openvino//:openvino",], # TODO dispose
     visibility = ["//visibility:public",],
+    local_defines = COMMON_LOCAL_DEFINES,
     copts = COPTS_ADJUSTED,
     linkopts = LINKOPTS_ADJUSTED,
     alwayslink = 1,
@@ -441,8 +442,8 @@ py_test(
     name = "test_python_binding",
     srcs = glob(["bindings/python/tests/*.py"]),
     main = "bindings/python/tests/run.py",
-    imports=["."],
-    data = [":pyovms.so"],
+    imports=["python"],
+    data = ["//src/python:pyovms.so"],
     deps = all_requirements
 )
 
@@ -676,6 +677,7 @@ cc_library(
     srcs = ["status.cpp",],
     deps = [],
     visibility = ["//visibility:public"],
+    local_defines = COMMON_LOCAL_DEFINES,
     copts = COPTS_ADJUSTED,
     linkopts = LINKOPTS_ADJUSTED,
 )
@@ -689,6 +691,7 @@ cc_library(
             "libovmsstatus",
             "libovmslogging",],
     visibility = ["//visibility:public",],
+    local_defines = COMMON_LOCAL_DEFINES,
     copts = COPTS_ADJUSTED,
     linkopts = LINKOPTS_ADJUSTED,
 )
@@ -699,6 +702,7 @@ cc_library( # make ovms_lib dependent, use share doptions
     srcs = ["stringutils.cpp",],
     deps = [],
     visibility = ["//visibility:public"],
+    local_defines = COMMON_LOCAL_DEFINES,
     copts = COPTS_ADJUSTED,
     linkopts = LINKOPTS_ADJUSTED,
 )
@@ -710,6 +714,7 @@ cc_library(
     srcs = ["model_version_policy.cpp",],
     deps = [],
     visibility = ["//visibility:public"],
+    local_defines = COMMON_LOCAL_DEFINES,
     copts = COPTS_ADJUSTED,
     linkopts = LINKOPTS_ADJUSTED,
 )
@@ -732,6 +737,7 @@ cc_library( # make ovms_lib dependent, use share doptions
         "libovmsstatus",
     ],
     visibility = ["//visibility:public"],
+    local_defines = COMMON_LOCAL_DEFINES,
     copts = COPTS_ADJUSTED,
     linkopts = LINKOPTS_ADJUSTED,
 )
@@ -751,6 +757,7 @@ cc_library( # make ovms_lib dependent, use share doptions
         "libovmsstatus",
     ],
     visibility = ["//visibility:public"],
+    local_defines = COMMON_LOCAL_DEFINES,
     copts = COPTS_ADJUSTED,
     linkopts = LINKOPTS_ADJUSTED,
 )
@@ -772,6 +779,7 @@ cc_library( # make ovms_lib dependent, use share doptions
         "libovmsstatus",
     ],
     visibility = ["//visibility:public"],
+    local_defines = COMMON_LOCAL_DEFINES,
     copts = COPTS_ADJUSTED,
     linkopts = LINKOPTS_ADJUSTED,
 )
@@ -786,6 +794,7 @@ cc_library(
             "libovmsmodelversioning",
             "libovmsstatus",],
     visibility = ["//visibility:public"],
+    local_defines = COMMON_LOCAL_DEFINES,
     copts = COPTS_ADJUSTED,
     linkopts = LINKOPTS_ADJUSTED,
 )
@@ -798,6 +807,7 @@ cc_library(
             "libovmsstatus",
             "libovmslogging"],
     visibility = ["//visibility:public"],
+    local_defines = COMMON_LOCAL_DEFINES,
     copts = COPTS_ADJUSTED,
     linkopts = LINKOPTS_ADJUSTED,
 )
@@ -814,6 +824,7 @@ cc_library(
             "libovmslocalfilesystem",
             "libovmslogging"],
     visibility = ["//visibility:public"],
+    local_defines = COMMON_LOCAL_DEFINES,
     copts = COPTS_ADJUSTED,
     linkopts = LINKOPTS_ADJUSTED,
 )
@@ -831,6 +842,7 @@ cc_library(
         "module.hpp",],
     deps = [],
     visibility = ["//visibility:public"],
+    local_defines = COMMON_LOCAL_DEFINES,
     copts = COPTS_ADJUSTED,
     linkopts = LINKOPTS_ADJUSTED,
 )
