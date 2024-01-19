@@ -13,8 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //*****************************************************************************
-#include "statefulmodelinstance.hpp"
-
 #include <openvino/openvino.hpp>
 #include <openvino/pass/low_latency.hpp>
 
@@ -27,6 +25,7 @@
 #include "profiler.hpp"
 #include "sequence_processing_spec.hpp"
 #include "serialization.hpp"
+#include "statefulmodelinstance.hpp"
 #include "timer.hpp"
 
 namespace ovms {
@@ -54,7 +53,6 @@ const Status extractSequenceIdInternal(const tensorflow::TensorProto& proto, uin
     return StatusCode::SEQUENCE_ID_BAD_TYPE;
 }
 
-
 const Status StatefulModelInstance::extractSequenceId(const tensorflow::TensorProto& proto, uint64_t& sequenceId) {
     return extractSequenceIdInternal(proto, sequenceId);
 }
@@ -81,7 +79,7 @@ static const Status extractSequenceControlInputInternal(const tensorflow::Tensor
 }
 
 const Status StatefulModelInstance::extractSequenceControlInput(const tensorflow::TensorProto& proto, uint32_t& sequenceControlInput) {
-        return extractSequenceControlInputInternal(proto, sequenceControlInput);
+    return extractSequenceControlInputInternal(proto, sequenceControlInput);
 }
 
 Status StatefulModelInstance::loadModel(const ModelConfig& config) {

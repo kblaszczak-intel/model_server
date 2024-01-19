@@ -92,10 +92,12 @@ protected:
          */
     std::shared_ptr<ov::Model> model;
 
+public: // FIXME
     /**
          * @brief OpenVINO Runtime CompiledModel object
          */
     std::shared_ptr<ov::CompiledModel> compiledModel;
+protected:
 
     /**
          * @brief Model name
@@ -122,10 +124,12 @@ protected:
          */
     ModelVersionStatus status;
 
+public: // FIXME 
     /**
          * @brief Target device to run model
          */
-    std::string targetDevice;
+    std::string targetDevice; // TODO should read from config
+protected:
 
     /**
          * @brief Model batch size
@@ -582,6 +586,9 @@ public:
     template <class ArrayType>
     void fetchModelFiles(bool& found, ArrayType ext);
     Status infer(float* data, float* output);
+    //template <typename Request, typename Response>
+    //std::unique_ptr<RequestProcessor<Request, Response>> createRequestProcessor(const Request*, Response*);
+
     virtual std::unique_ptr<RequestProcessor<tensorflow::serving::PredictRequest, tensorflow::serving::PredictResponse>> createRequestProcessor(const tensorflow::serving::PredictRequest*, tensorflow::serving::PredictResponse*);
     virtual std::unique_ptr<RequestProcessor<KFSRequest, KFSResponse>> createRequestProcessor(const KFSRequest*, KFSResponse*);
     virtual std::unique_ptr<RequestProcessor<InferenceRequest, InferenceResponse>> createRequestProcessor(const InferenceRequest*, InferenceResponse*);

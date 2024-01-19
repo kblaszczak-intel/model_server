@@ -76,7 +76,6 @@ protected:
     Status loadOVCompiledModel(const ModelConfig& config) override;
 
 public:
-
     std::unique_ptr<RequestProcessor<tensorflow::serving::PredictRequest, tensorflow::serving::PredictResponse>> createRequestProcessor(const tensorflow::serving::PredictRequest*, tensorflow::serving::PredictResponse*) override;
     const std::set<std::string>& getOptionalInputNames() override;
 };
@@ -97,6 +96,6 @@ struct StatefulRequestProcessor : public RequestProcessor<RequestType, ResponseT
     Status postInferenceProcessing(ResponseType* response, ov::InferRequest& inferRequest) override;
     Status release() override;
 };
-    template <typename RequestType>
-    static const Status extractSpecialKeys(const RequestType* request, SequenceProcessingSpec& sequenceProcessingSpec);
+template <typename RequestType>
+static const Status extractSpecialKeys(const RequestType* request, SequenceProcessingSpec& sequenceProcessingSpec);
 }  // namespace ovms
