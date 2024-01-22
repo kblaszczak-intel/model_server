@@ -6,11 +6,11 @@
 
  Starting with version 2023.3, OpenVINO Model Server supports execution of custom Python code. Such code can execute simple pre- or post-processing as well as complex tasks like image or text generation. 
  
- Python execution is enabled via [MediaPipe](../mediapipe.md) by the built-in [`PythonExecutorCalculator`](https://docs.openvino.ai/nightly/ovms_docs_python_support_reference.html#pythonexecutorcalculator) that allows creating graph nodes to execute Python code. Python nodes can be used as standalone servables (single node graphs) or be part of larger MediaPipe graphs.
+ Python execution is enabled via [MediaPipe](../mediapipe.md) by the built-in [PythonExecutorCalculator](#pythonexecutorcalculator-node) that allows creating graph nodes to execute Python code. Python nodes can be used as standalone servables (single node graphs) or be part of larger MediaPipe graphs.
 
  Check out the [quickstart guide](quickstart.md) for a simple example that shows how to use this feature.
 
- Check out [Generative AI demos](https://docs.openvino.ai/nightly/ovms_docs_demos.html#check-out-new-generative-ai-demos) for real life use cases.
+ Check out [Generative AI demos](../../demos/README.md#check-out-new-generative-ai-demos) for real life use cases.
 
  ## Building Docker Image
 
@@ -109,7 +109,7 @@ For gRPC streaming, there can be multiple graph instances existing at the same t
 #### Parameters and return value
 
 `initialize` is called with `kwargs` parameter which is a dictionary. 
-`kwargs` contain information from [node configuration](https://docs.openvino.ai/nightly/ovms_docs_python_support_reference.html#pythonexecutorcalculator). Considering a sample:
+`kwargs` contain information from [node configuration](#pythonexecutorcalculator-node). Considering a sample:
 
 ```pbtxt
 node {
@@ -157,7 +157,7 @@ def execute(self, inputs):
     return outputs
 ```
 
-More information along with the configuration aspect described can be found in [execution modes](https://docs.openvino.ai/nightly/ovms_docs_python_support_reference.html#execution-modes) section.
+More information along with the configuration aspect described can be found in [execution modes](#execution-modes) section.
 
 #### Generative 
 
@@ -171,7 +171,7 @@ def execute(self, inputs):
         yield outputs
 ```
 
-More information along with the configuration aspect described can be found in [execution modes](https://docs.openvino.ai/nightly/ovms_docs_python_support_reference.html#execution-modes) section.
+More information along with the configuration aspect described can be found in [execution modes section](#execution-modes).
 
 #### Parameters and return value
 
@@ -190,7 +190,7 @@ Note that this method returns outputs as a list, but since each output is a sepa
 
 - For unary endpoints model server gathers all outputs from the graph and sends them all together in a single response
 
-- For streaming endpoints model server packs output and sends it in the response as soon as it arrives. It means that if `execute` returns a list of `X` outputs, the client will receive those outputs in `X` separate responses. The outputs can then be [gathered using timestamp](https://docs.openvino.ai/nightly/ovms_docs_python_support_reference.html#outputs-synchronization-in-grpc-streaming) that can be found in received responses.
+- For streaming endpoints model server packs output and sends it in the response as soon as it arrives. It means that if `execute` returns a list of `X` outputs, the client will receive those outputs in `X` separate responses. The outputs can then be [gathered using timestamp](#outputs-synchronization-in-grpc-streaming) that can be found in received responses.
 
 #### Error handling
 
@@ -356,7 +356,7 @@ The way the graph is configured has a huge impact on the whole deployment. It de
 - graph and nodes options
 - input stream handlers (defines conditions that must be met to launch `Process` in the node)
 
-### PythonExecutorCalculator
+### PythonExecutorCalculator node
 
 Main part of the configuration is the node setting. Python nodes should use `PythonExecutorCalculator` and **must** be named. See a basic example:
 
@@ -701,7 +701,7 @@ from pyovms import Tensor
         return [my_output]
 ```
 
-When `execute` returns, the [`PythonExecutorCalculator`](https://docs.openvino.ai/nightly/ovms_docs_python_support_reference.html#pythonexecutorcalculator) grabs the outputs and pushes them down the graph. Node `Process` method is called once per inputs set. Such implementation can be paired with basic graph setting, like:
+When `execute` returns, the [PythonExecutorCalculator](#pythonexecutorcalculator-node) grabs the outputs and pushes them down the graph. Node `Process` method is called once per inputs set. Such implementation can be paired with basic graph setting, like:
 
 ```pbtxt
 node {
@@ -732,7 +732,7 @@ from pyovms import Tensor
           yield [my_output]
 ```
 
-When `execute` yields, the [`PythonExecutorCalculator`](https://docs.openvino.ai/nightly/ovms_docs_python_support_reference.html#pythonexecutorcalculator) saves the generator. Then it repeatedly calls it until it reaches the end of generated sequence. Node `Process` method is called multiple times per single inputs set. To trigger such behavior a specific graph configuration is needed. See below: 
+When `execute` yields, the [PythonExecutorCalculator](#pythonexecutorcalculator-node) saves the generator. Then it repeatedly calls it until it reaches the end of generated sequence. Node `Process` method is called multiple times per single inputs set. To trigger such behavior a specific graph configuration is needed. See below: 
 
 ```pbtxt
 node {
