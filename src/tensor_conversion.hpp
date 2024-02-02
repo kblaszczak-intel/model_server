@@ -32,6 +32,9 @@ template <typename TensorType>
 Status convertStringRequestToOVTensor1D(const TensorType& src, ov::Tensor& tensor, const std::string* buffer);
 
 template <typename TensorType>
+Status convertStringRequestToStringOVTensor(const TensorType& src, ov::Tensor& tensor, const std::string* buffer);
+
+template <typename TensorType>
 Status convertOVTensor2DToStringResponse(const ov::Tensor& tensor, TensorType& dst);
 
 }  // namespace ovms

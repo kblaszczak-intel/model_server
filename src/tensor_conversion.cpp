@@ -632,6 +632,39 @@ Status convertStringRequestToOVTensor1D(const TensorType& src, ov::Tensor& tenso
 }
 
 template <typename TensorType>
+Status convertStringRequestToStringOVTensor(const TensorType& src, ov::Tensor& tensor, const std::string* buffer) {
+    std::vector<uint32_t> stringSizes;
+    uint32_t totalStringsLength = 0;
+    while (totalStringsLength + stringSizes.size() * sizeof(uint32_t) + sizeof(uint32_t) <= buffer->size()) {
+        uint32_t inputSize = *(reinterpret_cast<const uint32_t*>(buffer->data() + totalStringsLength + stringSizes.size() * sizeof(uint32_t)));
+        stringSizes.push_back(inputSize);
+        totalStringsLength += inputSize;
+    }
+    size_t batchSize = stringSizes.size();
+    if ((totalStringsLength + batchSize * sizeof(uint32_t)) != buffer->size()) {
+        SPDLOG_DEBUG("Input string format conversion failed");
+        return StatusCode::INVALID_STRING_INPUT;
+    }
+    //size_t metadataLength = sizeof(uint32_t) * (batchSize + 2);
+    //size_t width = totalStringsLength + metadataLength;
+    //tensor = ov::Tensor(ov::element::Type_t::u8, ov::Shape{width});
+    tensor = ov::Tensor(ov::element::string, ov::Shape{batchSize});
+    // uint32_t* data = reinterpret_cast<uint32_t*>(tensor.data<uint8_t>());
+    // data[0] = static_cast<uint32_t>(batchSize);
+    // data[1] = 0;  // first string start offset
+    //unsigned char* condensedStringsStart = tensor.data<unsigned char>() + metadataLength;
+    size_t tensorStringsOffset = 0;
+    for (size_t i = 0; i < stringSizes.size(); i++) {
+        // data[i + 2] = data[i + 1] + stringSizes[i];
+        std::string* dd = tensor.data<std::string>();
+        dd[i].assign(reinterpret_cast<const char*>(buffer->data() + (i + 1) * sizeof(uint32_t) + tensorStringsOffset), (size_t)stringSizes[i]);
+        //std::memcpy(condensedStringsStart + tensorStringsOffset, reinterpret_cast<const unsigned char*>(buffer->data() + (i + 1) * sizeof(uint32_t) + tensorStringsOffset), stringSizes[i]);
+        tensorStringsOffset += stringSizes[i];
+    }
+    return StatusCode::OK;
+}
+
+template <typename TensorType>
 Status convertOVTensor2DToStringResponse(const ov::Tensor& tensor, TensorType& dst) {
     if (tensor.get_shape().size() != 2) {
         return StatusCode::INTERNAL_ERROR;
@@ -659,6 +692,7 @@ template Status convertStringRequestToOVTensor2D<::KFSRequest::InferInputTensor>
 
 template Status convertStringRequestToOVTensor1D<tensorflow::TensorProto>(const tensorflow::TensorProto& src, ov::Tensor& tensor, const std::string* buffer);
 template Status convertStringRequestToOVTensor1D<::KFSRequest::InferInputTensor>(const ::KFSRequest::InferInputTensor& src, ov::Tensor& tensor, const std::string* buffer);
+template Status convertStringRequestToStringOVTensor<::KFSRequest::InferInputTensor>(const ::KFSRequest::InferInputTensor& src, ov::Tensor& tensor, const std::string* buffer);
 
 template Status convertOVTensor2DToStringResponse<tensorflow::TensorProto>(const ov::Tensor& tensor, tensorflow::TensorProto& dst);
 template Status convertOVTensor2DToStringResponse<::KFSResponse::InferOutputTensor>(const ov::Tensor& tensor, ::KFSResponse::InferOutputTensor& dst);

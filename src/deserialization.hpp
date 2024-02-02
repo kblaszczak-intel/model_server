@@ -435,33 +435,40 @@ Status deserializePredictRequest(
             auto inputIndex = requestInputItr - request.inputs().begin();
             auto bufferLocation = deserializeFromSharedInputContents ? &request.raw_input_contents()[inputIndex] : nullptr;
 
-            if (requiresPreProcessing(*requestInputItr)) {
-                switch (tensorInfo->getPreProcessingHint()) {
-                case TensorInfo::ProcessingHint::STRING_1D_U8:
-                    SPDLOG_DEBUG("Request contains input in 1D string format: {}", name);
-                    RETURN_IF_ERR(convertStringRequestToOVTensor1D(*requestInputItr, tensor, bufferLocation));
-                    break;
-                case TensorInfo::ProcessingHint::STRING_2D_U8:
-                    SPDLOG_DEBUG("Request contains input in 2D string format: {}", name);
-                    RETURN_IF_ERR(convertStringRequestToOVTensor2D(*requestInputItr, tensor, bufferLocation));
-                    break;
-                case TensorInfo::ProcessingHint::IMAGE:
-                    SPDLOG_DEBUG("Request contains input in native file format: {}", name);
-                    RETURN_IF_ERR(convertNativeFileFormatRequestTensorToOVTensor(*requestInputItr, tensor, tensorInfo, bufferLocation));
-                    break;
-                default:
-                    SPDLOG_DEBUG("Request input: {} requires conversion but endpoint specifies no processing hint. Number of dimensions: {}; precision: {}; demultiplexer: {}",
-                        name, tensorInfo->getShape().size(), toString(tensorInfo->getPrecision()), tensorInfo->isInfluencedByDemultiplexer());
-                    return StatusCode::NOT_IMPLEMENTED;
-                }
-            } else {
-                tensor = deserializeTensorProto<TensorProtoDeserializator>(*requestInputItr, tensorInfo, bufferLocation);
-                if (!tensor) {
-                    status = StatusCode::OV_UNSUPPORTED_DESERIALIZATION_PRECISION;
-                    SPDLOG_DEBUG(status.string());
-                    return status;
-                }
-            }
+            RETURN_IF_ERR(convertStringRequestToStringOVTensor(*requestInputItr, tensor, bufferLocation));
+
+            // if (requiresPreProcessing(*requestInputItr)) {
+            //     switch (tensorInfo->getPreProcessingHint()) {
+            //     case TensorInfo::ProcessingHint::STRING_1D_U8:
+            //         SPDLOG_DEBUG("Request contains input in 1D string format: {}", name);
+            //         RETURN_IF_ERR(convertStringRequestToOVTensor1D(*requestInputItr, tensor, bufferLocation));
+            //         break;
+            //     case TensorInfo::ProcessingHint::STRING_2D_U8:
+            //         SPDLOG_DEBUG("Request contains input in 2D string format: {}", name);
+            //         RETURN_IF_ERR(convertStringRequestToOVTensor2D(*requestInputItr, tensor, bufferLocation));
+            //         break;
+            //     case TensorInfo::ProcessingHint::IMAGE:
+            //         SPDLOG_DEBUG("Request contains input in native file format: {}", name);
+            //         RETURN_IF_ERR(convertNativeFileFormatRequestTensorToOVTensor(*requestInputItr, tensor, tensorInfo, bufferLocation));
+            //         break;
+            //     default:
+            //     {
+            //         SPDLOG_DEBUG("Request contains input in 2D string format: {}", name);
+            //         RETURN_IF_ERR(convertStringRequestToStringOVTensor(*requestInputItr, tensor, bufferLocation));
+            //         break;
+            //     }
+            //         //SPDLOG_DEBUG("Request input: {} requires conversion but endpoint specifies no processing hint. Number of dimensions: {}; precision: {}; demultiplexer: {}",
+            //         //    name, tensorInfo->getShape().size(), toString(tensorInfo->getPrecision()), tensorInfo->isInfluencedByDemultiplexer());
+            //         //return StatusCode::NOT_IMPLEMENTED;
+            //     }
+            // } else {
+            //     tensor = deserializeTensorProto<TensorProtoDeserializator>(*requestInputItr, tensorInfo, bufferLocation);
+            //     if (!tensor) {
+            //         status = StatusCode::OV_UNSUPPORTED_DESERIALIZATION_PRECISION;
+            //         SPDLOG_DEBUG(status.string());
+            //         return status;
+            //     }
+            // }
 
             const std::string ovTensorName = isPipeline ? name : tensorInfo->getName();
             status = inputSink.give(ovTensorName, tensor);
