@@ -1,6 +1,6 @@
 pipeline {
     agent {
-      label 'ovms-coordinator'
+      label 'ovmsoncommit'
     }
     stages {
         stage('Configure') {
