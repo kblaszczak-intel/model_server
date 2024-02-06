@@ -19,9 +19,9 @@ HTTP_PROXY := "$(http_proxy)"
 HTTPS_PROXY := "$(https_proxy)"
 NO_PROXY := "$(no_proxy)"
 BASE_OS_TAG_UBUNTU ?= 20.04
-BASE_OS_TAG_REDHAT ?= 8.7
-REDHAT_PACKAGE_URL ?="https://github.com/openvinotoolkit/model_server/releases/download/v2022.3/ovms_redhat.tar.gz"
-UBUNTU_PACKAGE_URL ?="https://github.com/openvinotoolkit/model_server/releases/download/v2022.3/ovms_ubuntu.tar.gz"
+BASE_OS_TAG_REDHAT ?= 8.8
+REDHAT_PACKAGE_URL ?="https://github.com/openvinotoolkit/model_server/releases/download/v2023.2/ovms_redhat.tar.gz"
+UBUNTU_PACKAGE_URL ?="https://github.com/openvinotoolkit/model_server/releases/download/v2023.2/ovms_ubuntu20.tar.gz"
 
 OVMS_CPP_DOCKER_IMAGE ?= openvino/model_server
 OVMS_CPP_IMAGE_TAG ?= latest
@@ -43,8 +43,9 @@ clean:
 	mkdir -vp capi/$(DIST_OS)/demos && cd capi/$(DIST_OS)
 
 from_docker:
+	mkdir -p capi/$(DIST_OS)
 	docker run $(OVMS_CPP_DOCKER_IMAGE)-pkg:$(OVMS_CPP_IMAGE_TAG) bash -c \
-			"tar -c -C / ovms.tar.gz ; sleep 2" | tar -x -C capi/$(DIST_OS)/ && cd ../../
+			"tar -c -C /ovms_pkg/$(DIST_OS) ovms.tar.gz ; sleep 2" | tar -x -C capi/$(DIST_OS)/ && cd ../../
 	-docker rm -v $$(docker ps -a -q -f status=exited -f ancestor=$(OVMS_CPP_DOCKER_IMAGE)-pkg:$(OVMS_CPP_IMAGE_TAG))
 
 from_web:

@@ -19,8 +19,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "../buffer.hpp"
-#include "../inferencerequest.hpp"
+#include "../capi_frontend/buffer.hpp"
+#include "../capi_frontend/inferencerequest.hpp"
 #include "../modelconfig.hpp"
 #include "../predict_request_validation_utils.hpp"
 #include "test_utils.hpp"
@@ -81,6 +81,62 @@ protected:
 TEST_F(CAPIPredictValidation, ValidRequest) {
     auto status = instance->mockValidate(&request);
     EXPECT_TRUE(status.ok()) << status.string();
+}
+
+TEST_F(CAPIPredictValidation, AllowScalar) {
+    servableInputs = ovms::tensor_map_t({{"Input_FP32_Scalar",
+        std::make_shared<ovms::TensorInfo>("Input_FP32_Scalar", ovms::Precision::FP32, ovms::shape_t{}, ovms::Layout{"..."})}});
+    requestData = std::vector<float>{2.5f};
+    preparePredictRequest(request,
+        {{"Input_FP32_Scalar",
+            std::tuple<ovms::signed_shape_t, ovms::Precision>{{}, ovms::Precision::FP32}}},
+        requestData);
+    auto status = instance->mockValidate(&request);
+    EXPECT_TRUE(status.ok()) << status.string();
+}
+
+// Requesting 0 batch via C-API
+// C-API mocked endpoints tested: dynamic batch (-1), range (0-100) and static 0.
+TEST_F(CAPIPredictValidation, Allow0DimInBatch) {
+    std::vector<ovms::Shape> shapes{
+        ovms::Shape{ovms::Dimension::any(), 400, 99},   // dynamic
+        ovms::Shape{ovms::Dimension{0, 100}, 400, 99},  // range
+        ovms::Shape{0, 400, 99}                         // static
+    };
+
+    for (const auto& shape : shapes) {
+        servableInputs = ovms::tensor_map_t({{"Input",
+            std::make_shared<ovms::TensorInfo>("Input", ovms::Precision::FP32, shape, ovms::Layout{"N..."})}});
+        requestData = std::vector<float>{};
+        preparePredictRequest(request,
+            {{"Input",
+                std::tuple<ovms::signed_shape_t, ovms::Precision>{{0, 400, 99}, ovms::Precision::FP32}}},
+            requestData);
+        auto status = instance->mockValidate(&request);
+        EXPECT_TRUE(status.ok()) << status.string();
+    }
+}
+
+// Requesting 0 dimension in position other than batch via C-API
+// C-API mocked endpoints tested: dynamic shape (-1), range (0-100) and static 0.
+TEST_F(CAPIPredictValidation, Allow0DimInShape) {
+    std::vector<ovms::Shape> shapes{
+        ovms::Shape{20, ovms::Dimension::any(), 400, 99},   // dynamic
+        ovms::Shape{20, ovms::Dimension{0, 100}, 400, 99},  // range
+        ovms::Shape{20, 0, 400, 99}                         // static
+    };
+
+    for (const auto& shape : shapes) {
+        servableInputs = ovms::tensor_map_t({{"Input",
+            std::make_shared<ovms::TensorInfo>("Input", ovms::Precision::FP32, shape, ovms::Layout{"N..."})}});
+        requestData = std::vector<float>{};
+        preparePredictRequest(request,
+            {{"Input",
+                std::tuple<ovms::signed_shape_t, ovms::Precision>{{20, 0, 400, 99}, ovms::Precision::FP32}}},
+            requestData);
+        auto status = instance->mockValidate(&request);
+        EXPECT_TRUE(status.ok()) << status.string();
+    }
 }
 
 TEST_F(CAPIPredictValidation, InvalidPrecision) {

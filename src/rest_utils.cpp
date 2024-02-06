@@ -27,6 +27,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wall"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 #include "tensorflow_serving/util/json_tensor.h"
 #pragma GCC diagnostic pop
 #include "kfs_frontend/kfs_utils.hpp"
@@ -53,8 +54,6 @@ enum : unsigned int {
 namespace ovms {
 
 static Status checkValField(const size_t& fieldSize, const size_t& expectedElementsNumber) {
-    if (fieldSize == 0)
-        return StatusCode::REST_SERIALIZE_NO_DATA;
     if (fieldSize != expectedElementsNumber)
         return StatusCode::REST_SERIALIZE_VAL_FIELD_INVALID_SIZE;
     return StatusCode::OK;
@@ -180,6 +179,13 @@ Status makeJsonFromPredictResponse(
                     tensor.add_uint64_val(*reinterpret_cast<uint64_t*>(tensor.mutable_tensor_content()->data() + i));
             }
             break;
+        case DataType::DT_STRING:
+            if (seekDataInValField) {
+                auto status = checkValField(tensor.string_val_size(), tensor.tensor_shape().dim(0).size());
+                if (!status.ok())
+                    return status;
+            }
+            break;
         default:
             return StatusCode::REST_UNSUPPORTED_PRECISION;
         }
@@ -198,7 +204,7 @@ Status makeJsonFromPredictResponse(
     SPDLOG_DEBUG("MakeJsonFromTensors call: {:.3f} ms", timer.elapsed<microseconds>(MAKE_JSON_FROM_TENSORS) / 1000);
 
     if (!tf_status.ok()) {
-        SPDLOG_ERROR("Creating json from tensors failed: {}", tf_status.error_message());
+        SPDLOG_ERROR("Creating json from tensors failed: {}", tf_status.message());
         return StatusCode::REST_PROTO_TO_STRING_ERROR;
     }
 

@@ -297,6 +297,39 @@ TEST_F(KFSRestParserTest, parseValidRequestBOOL) {
     ASSERT_THAT(proto.inputs()[0].contents().bool_contents(), ElementsAre(true, true, false, false));
 }
 
+TEST_F(KFSRestParserTest, parseRequestWithZeroDim) {
+    std::string request = R"({
+    "inputs" : [
+        {
+        "name" : "input0",
+        "shape" : [ 10, 224, 0, 3 ],
+        "datatype" : "INT64",
+        "data" : [ ]
+        }
+    ]
+    })";
+    auto status = parser.parse(request.c_str());
+    ASSERT_EQ(status, StatusCode::OK);
+
+    auto proto = parser.getProto();
+    ASSERT_EQ(proto.inputs_size(), 1);
+    ASSERT_EQ(proto.inputs()[0].name(), "input0");
+    ASSERT_THAT(proto.inputs()[0].shape(), ElementsAre(10, 224, 0, 3));
+    ASSERT_EQ(proto.inputs()[0].datatype(), "INT64");
+    // when data is present, it should be packed here
+    ASSERT_EQ(proto.inputs()[0].contents().int64_contents_size(), 0);
+    // all the containers below should be empty as well
+    // the entire request should contain no data
+    ASSERT_EQ(proto.inputs()[0].contents().fp32_contents_size(), 0);
+    ASSERT_EQ(proto.inputs()[0].contents().fp64_contents_size(), 0);
+    ASSERT_EQ(proto.inputs()[0].contents().int64_contents_size(), 0);
+    ASSERT_EQ(proto.inputs()[0].contents().uint_contents_size(), 0);
+    ASSERT_EQ(proto.inputs()[0].contents().uint64_contents_size(), 0);
+    ASSERT_EQ(proto.inputs()[0].contents().bytes_contents_size(), 0);
+    ASSERT_EQ(proto.inputs()[0].contents().bool_contents_size(), 0);
+    ASSERT_EQ(proto.raw_input_contents_size(), 0);
+}
+
 TEST_F(KFSRestParserTest, parseValidRequestStringInput) {
     std::string request = R"({
     "inputs" : [
@@ -341,6 +374,13 @@ TEST_F(KFSRestParserTest, parseValidRequestStringInputNested) {
     ASSERT_EQ(proto.inputs()[0].datatype(), "BYTES");
     ASSERT_EQ(proto.inputs()[0].contents().bytes_contents_size(), 3);
     ASSERT_THAT(proto.inputs()[0].contents().bytes_contents(), ElementsAre("zebra", "openvino", "123"));
+}
+
+TEST_F(KFSRestParserTest, InvalidJson) {
+    std::string request = R"({
+    "inputs" : [ INVALID)";
+    auto status = parser.parse(request.c_str());
+    ASSERT_EQ(status, StatusCode::JSON_INVALID);
 }
 
 TEST_F(KFSRestParserTest, parseValidRequestBYTES) {
@@ -974,7 +1014,7 @@ TEST_F(KFSRestParserTest, parseNegativeBatch) {
         ASSERT_NE(status, StatusCode::OK) << "for value: " << replace;
     }
 
-    for (int i : std::vector<int>{-5, -8, -1, -0, -124}) {
+    for (int i : std::vector<int>{-5, -8, -1, -124}) {
         std::string replace = std::to_string(i);
         std::string requestCopy = std::regex_replace(request, std::regex("\\$replace"), replace);
         auto status = parser.parse(requestCopy.c_str());

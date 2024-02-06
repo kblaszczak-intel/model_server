@@ -30,6 +30,7 @@
 
 #define OUTPUT_NAME_TOKENS "input_ids"
 #define OUTPUT_NAME_ATTENTION "attention_mask"
+#define OUTPUT_NAME_POSITION "position_ids"
 
 // Size of memory allocation on the heap for generated tokens.
 // If the size of the output is larger than this value, the output is truncated.
@@ -48,7 +49,10 @@ int initialize(void** customNodeLibraryInternalManager, const struct CustomNodeP
     std::string modelPath = get_string_parameter("model_path", params, paramsCount, "");
     NODE_ASSERT(!modelPath.empty(), "model_path cannot be empty");
     try {
-        *customNodeLibraryInternalManager = new BlingFireModel(modelPath, debugMode);
+        auto cnlim = std::make_unique<BlingFireModel>(modelPath, debugMode);
+        if (!cnlim->isValid())
+            throw std::exception();
+        *customNodeLibraryInternalManager = cnlim.release();
     } catch (...) {
         std::cerr << "[tokenizer] initialize() fail: Cannot load tokenization model from path: " << modelPath << std::endl;
         return 1;
@@ -64,7 +68,7 @@ int deinitialize(void* customNodeLibraryInternalManager) {
     return 0;
 }
 
-int retrieveInputs(
+static int retrieveInputs(
     // in
     const struct CustomNodeTensor* inputs,
     int inputsCount,
@@ -81,7 +85,7 @@ int retrieveInputs(
     return 0;
 }
 
-int validateInputs(const CustomNodeTensor* textTensor) {
+static int validateInputs(const CustomNodeTensor* textTensor) {
     NODE_ASSERT(textTensor != nullptr, "Missing " INPUT_NAME_TEXTS " input");
     NODE_ASSERT(textTensor->precision == U8, INPUT_NAME_TEXTS " input is not U8");
 
@@ -106,7 +110,7 @@ int execute(const struct CustomNodeTensor* inputs, int inputsCount, struct Custo
 
     BlingFireModel* model = static_cast<BlingFireModel*>(customNodeLibraryInternalManager);
 
-    *outputsCount = 2;
+    *outputsCount = 3;
     *outputs = (struct CustomNodeTensor*)malloc(*outputsCount * sizeof(CustomNodeTensor));
     if ((*outputs) == nullptr) {
         std::cerr << "malloc has failed" << std::endl;
@@ -120,7 +124,7 @@ int execute(const struct CustomNodeTensor* inputs, int inputsCount, struct Custo
         const char* strStart = (const char*)textTensor->data + batch * textTensor->dims[1];
         std::string text(strStart, strnlen(strStart, textTensor->dims[1]));
         ids[batch] = model->tokenize(text, maxIdsArrLength);
-        DEBUG_MSG("tokenied batch " << batch << "; of string: " << text);
+        DEBUG_MSG("tokenized batch " << batch << "; of string: " << text);
     }
 
     DEBUG_MSG("getting max token size");
@@ -152,11 +156,25 @@ int execute(const struct CustomNodeTensor* inputs, int inputsCount, struct Custo
     attention.dims[1] = maxTokenSize;
     attention.precision = I64;
 
+    CustomNodeTensor& position = (*outputs)[2];
+    position.name = OUTPUT_NAME_POSITION;
+    position.dataBytes = sizeof(int64_t) * maxTokenSize * ids.size();
+    position.data = (uint8_t*)malloc(position.dataBytes);
+    position.dimsCount = 2;
+    position.dims = (uint64_t*)malloc(position.dimsCount * sizeof(uint64_t));
+    NODE_ASSERT(position.dims != nullptr, "malloc has failed");
+    position.dims[0] = ids.size();
+    position.dims[1] = maxTokenSize;
+    position.precision = I64;
     DEBUG_MSG("writing output");
+
     for (size_t i = 0; i < ids.size(); i++) {
         std::memcpy(tokens.data + i * maxTokenSize * sizeof(int64_t), ids[i].data(), ids[i].size() * sizeof(int64_t));
         for (size_t j = 0; j < ids[i].size(); j++) {
             ((int64_t*)attention.data)[i * maxTokenSize + j] = 1;
+        }
+        for (size_t j = 0; j < ids[i].size(); j++) {
+            ((int64_t*)position.data)[i * maxTokenSize + j] = j;
         }
         for (size_t j = ids[i].size(); j < maxTokenSize; j++) {
             ((int64_t*)attention.data)[i * maxTokenSize + j] = 0;
@@ -183,7 +201,7 @@ int getInputsInfo(struct CustomNodeTensorInfo** info, int* infoCount, const stru
 }
 
 int getOutputsInfo(struct CustomNodeTensorInfo** info, int* infoCount, const struct CustomNodeParam* params, int paramsCount, void* customNodeLibraryInternalManager) {
-    *infoCount = 2;
+    *infoCount = 3;
     *info = (struct CustomNodeTensorInfo*)malloc(*infoCount * sizeof(struct CustomNodeTensorInfo));
     NODE_ASSERT((*info) != nullptr, "malloc has failed");
 
@@ -202,6 +220,14 @@ int getOutputsInfo(struct CustomNodeTensorInfo** info, int* infoCount, const str
     (*info)[1].dims[0] = -1;
     (*info)[1].dims[1] = -1;
     (*info)[1].precision = I64;
+
+    (*info)[2].name = OUTPUT_NAME_POSITION;
+    (*info)[2].dimsCount = 2;
+    (*info)[2].dims = (uint64_t*)malloc((*info)->dimsCount * sizeof(uint64_t));
+    NODE_ASSERT(((*info)[2].dims) != nullptr, "malloc has failed");
+    (*info)[2].dims[0] = -1;
+    (*info)[2].dims[1] = -1;
+    (*info)[2].precision = I64;
     return 0;
 }
 

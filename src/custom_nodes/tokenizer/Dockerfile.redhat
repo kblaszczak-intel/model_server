@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-FROM registry.access.redhat.com/ubi8/ubi:8.7
+FROM registry.access.redhat.com/ubi8/ubi:8.8
 RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm && yum update -d6 -y && yum install -d6 -y gcc-c++ curl xz cmake git
 
 WORKDIR /
@@ -24,4 +24,4 @@ COPY ./test /custom_nodes/tokenizer/test
 COPY ./CMakeLists.txt /custom_nodes/tokenizer/CMakeLists.txt
 COPY custom_node_interface.h /
 WORKDIR /custom_nodes/tokenizer/build
-RUN cmake .. && make -j`nproc`
+RUN cmake -DWITH_TESTS=1 .. && make -j`nproc` && ./test/detokenization_test && ./test/tokenization_test

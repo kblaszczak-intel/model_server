@@ -26,8 +26,9 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wall"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#include "tensorflow_serving/util/net_http/public/response_code_enum.h"
 #include "tensorflow_serving/util/net_http/server/public/httpserver.h"
-#include "tensorflow_serving/util/net_http/server/public/response_code_enum.h"
 #include "tensorflow_serving/util/net_http/server/public/server_request_interface.h"
 #include "tensorflow_serving/util/threadpool_executor.h"
 #pragma GCC diagnostic pop
@@ -39,7 +40,7 @@ namespace ovms {
 
 namespace net_http = tensorflow::serving::net_http;
 
-const net_http::HTTPStatusCode http(const ovms::Status& status) {
+static const net_http::HTTPStatusCode http(const ovms::Status& status) {
     const std::unordered_map<const StatusCode, net_http::HTTPStatusCode> httpStatusMap = {
         {StatusCode::OK, net_http::HTTPStatusCode::OK},
         {StatusCode::OK_RELOADED, net_http::HTTPStatusCode::CREATED},
@@ -70,7 +71,7 @@ const net_http::HTTPStatusCode http(const ovms::Status& status) {
         {StatusCode::REST_SERIALIZE_TENSOR_CONTENT_INVALID_SIZE, net_http::HTTPStatusCode::ERROR},
         {StatusCode::REST_BINARY_BUFFER_EXCEEDED, net_http::HTTPStatusCode::BAD_REQUEST},
 
-        {StatusCode::PATH_INVALID, net_http::HTTPStatusCode::ERROR},
+        {StatusCode::PATH_INVALID, net_http::HTTPStatusCode::BAD_REQUEST},
         {StatusCode::FILE_INVALID, net_http::HTTPStatusCode::ERROR},
         {StatusCode::NO_MODEL_VERSION_AVAILABLE, net_http::HTTPStatusCode::ERROR},
         {StatusCode::MODEL_NOT_LOADED, net_http::HTTPStatusCode::ERROR},
@@ -84,10 +85,11 @@ const net_http::HTTPStatusCode http(const ovms::Status& status) {
         {StatusCode::MODEL_MISSING, net_http::HTTPStatusCode::NOT_FOUND},
         {StatusCode::MODEL_NAME_MISSING, net_http::HTTPStatusCode::NOT_FOUND},
         {StatusCode::PIPELINE_DEFINITION_NAME_MISSING, net_http::HTTPStatusCode::NOT_FOUND},
+        {StatusCode::MEDIAPIPE_DEFINITION_NAME_MISSING, net_http::HTTPStatusCode::NOT_FOUND},
         {StatusCode::MODEL_VERSION_MISSING, net_http::HTTPStatusCode::NOT_FOUND},
         {StatusCode::MODEL_VERSION_NOT_LOADED_ANYMORE, net_http::HTTPStatusCode::NOT_FOUND},
-        {StatusCode::MODEL_VERSION_NOT_LOADED_YET, net_http::HTTPStatusCode::NOT_FOUND},
-        {StatusCode::PIPELINE_DEFINITION_NOT_LOADED_YET, net_http::HTTPStatusCode::NOT_FOUND},
+        {StatusCode::MODEL_VERSION_NOT_LOADED_YET, net_http::HTTPStatusCode::SERVICE_UNAV},
+        {StatusCode::PIPELINE_DEFINITION_NOT_LOADED_YET, net_http::HTTPStatusCode::SERVICE_UNAV},
         {StatusCode::PIPELINE_DEFINITION_NOT_LOADED_ANYMORE, net_http::HTTPStatusCode::NOT_FOUND},
         {StatusCode::MODEL_SPEC_MISSING, net_http::HTTPStatusCode::BAD_REQUEST},
         {StatusCode::INVALID_SIGNATURE_DEF, net_http::HTTPStatusCode::BAD_REQUEST},
@@ -108,6 +110,7 @@ const net_http::HTTPStatusCode http(const ovms::Status& status) {
         // Predict request validation
         {StatusCode::INVALID_NO_OF_INPUTS, net_http::HTTPStatusCode::BAD_REQUEST},
         {StatusCode::INVALID_MISSING_INPUT, net_http::HTTPStatusCode::BAD_REQUEST},
+        {StatusCode::INVALID_UNEXPECTED_INPUT, net_http::HTTPStatusCode::BAD_REQUEST},
         {StatusCode::INVALID_NO_OF_SHAPE_DIMENSIONS, net_http::HTTPStatusCode::BAD_REQUEST},
         {StatusCode::INVALID_BATCH_SIZE, net_http::HTTPStatusCode::BAD_REQUEST},
         {StatusCode::INVALID_SHAPE, net_http::HTTPStatusCode::BAD_REQUEST},

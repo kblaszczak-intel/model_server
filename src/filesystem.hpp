@@ -16,14 +16,15 @@
 #pragma once
 
 #include <filesystem>
+#include <fstream>
 #include <regex>
 #include <set>
 #include <string>
 #include <vector>
 
-#include <spdlog/spdlog.h>
-
+#include "logging.hpp"
 #include "model_version_policy.hpp"
+#include "openssl/md5.h"
 #include "status.hpp"
 
 namespace ovms {
@@ -31,6 +32,7 @@ namespace ovms {
 namespace fs = std::filesystem;
 
 using files_list_t = std::set<std::string>;
+
 class FileSystem {
 public:
     /**
@@ -130,7 +132,7 @@ public:
         std::string file_template = "/tmp/fileXXXXXX";
         char* tmp_folder = mkdtemp(const_cast<char*>(file_template.c_str()));
         if (tmp_folder == nullptr) {
-            SPDLOG_ERROR("Failed to create local temp folder: {} {}", file_template, strerror(errno));
+            SPDLOG_LOGGER_ERROR(modelmanager_logger, "Failed to create local temp folder: {} {}", file_template, strerror(errno));
             return StatusCode::FILESYSTEM_ERROR;
         }
         fs::permissions(tmp_folder,
@@ -148,7 +150,58 @@ public:
         return (std::string::npos != lhs && lhs == 0) || (std::string::npos != rhs && rhs == path.length() - 3) || std::string::npos != path.find("/../");
     }
 
-    std::string appendSlash(const std::string& name) {
+    static const std::string S3_URL_PREFIX;
+
+    static const std::string GCS_URL_PREFIX;
+
+    static const std::string AZURE_URL_FILE_PREFIX;
+
+    static const std::string AZURE_URL_BLOB_PREFIX;
+
+    static bool isLocalFilesystem(const std::string& basePath) {
+        if (basePath.rfind(S3_URL_PREFIX, 0) == 0) {
+            return false;
+        }
+        if (basePath.rfind(GCS_URL_PREFIX, 0) == 0) {
+            return false;
+        }
+        if (basePath.rfind(AZURE_URL_FILE_PREFIX, 0) == 0) {
+            return false;
+        }
+        if (basePath.rfind(AZURE_URL_BLOB_PREFIX, 0) == 0) {
+            return false;
+        }
+        return true;
+    }
+
+    static void setPath(std::string& path, const std::string& givenPath, const std::string& rootDirectoryPath) {
+        if (givenPath.size() == 0) {
+            path = rootDirectoryPath;
+        } else if (!FileSystem::isLocalFilesystem(givenPath)) {
+            // Cloud filesystem
+            path = givenPath;
+        } else if (givenPath.size() > 0 && givenPath.at(0) == '/') {
+            // Full path case
+            path = givenPath;
+        } else {
+            // Relative path case
+            if (rootDirectoryPath.empty())
+                throw std::logic_error("Using relative path without setting graph directory path.");
+            path = rootDirectoryPath + givenPath;
+        }
+    }
+
+    static void setRootDirectoryPath(std::string& rootDirectoryPath, const std::string& givenPath) {
+        std::string currentWorkingDir = std::filesystem::current_path();
+        if (givenPath.size() > 1 && givenPath.find_last_of("/\\") != std::string::npos) {
+            auto configDirectory = givenPath.substr(0, givenPath.find_last_of("/\\") + 1);
+            configDirectory.empty() ? rootDirectoryPath = currentWorkingDir + "/" : rootDirectoryPath = configDirectory;
+        } else {
+            rootDirectoryPath = currentWorkingDir + "/";
+        }
+    }
+
+    static std::string appendSlash(const std::string& name) {
         if (name.empty() || (name.back() == '/')) {
             return name;
         }
@@ -156,11 +209,11 @@ public:
         return (name + "/");
     }
 
-    bool isAbsolutePath(const std::string& path) {
+    static bool isAbsolutePath(const std::string& path) {
         return !path.empty() && (path[0] == '/');
     }
 
-    std::string joinPath(std::initializer_list<std::string> segments) {
+    static std::string joinPath(std::initializer_list<std::string> segments) {
         std::string joined;
 
         for (const auto& seg : segments) {
@@ -183,11 +236,32 @@ public:
         return joined;
     }
 
+    static std::string getFileMD5(const std::string& filename) {
+        std::ifstream ifs;
+        ifs.open(filename);
+        std::stringstream strStream;
+        strStream << ifs.rdbuf();
+        std::string str = strStream.str();
+        ifs.close();
+        return getStringMD5(str);
+    }
+
+    static std::string getStringMD5(const std::string& str) {
+        unsigned char result[MD5_DIGEST_LENGTH];
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+        MD5((unsigned char*)str.c_str(), str.size(), result);
+#pragma GCC diagnostic pop
+
+        std::string md5sum(reinterpret_cast<char*>(result), MD5_DIGEST_LENGTH);
+        return (md5sum);
+    }
+
     StatusCode CreateLocalDir(const std::string& path) {
         int status =
             mkdir(const_cast<char*>(path.c_str()), S_IRUSR | S_IWUSR | S_IXUSR);
         if (status == -1) {
-            SPDLOG_ERROR("Failed to create local folder: {} {} ", path, strerror(errno));
+            SPDLOG_LOGGER_ERROR(modelmanager_logger, "Failed to create local folder: {} {} ", path, strerror(errno));
             return StatusCode::PATH_INVALID;
         }
         return StatusCode::OK;

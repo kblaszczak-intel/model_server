@@ -28,16 +28,14 @@
 #include "tensorflow_serving/apis/prediction_service.grpc.pb.h"
 #pragma GCC diagnostic pop
 
-#include "../buffer.hpp"
+#include "../capi_frontend/buffer.hpp"
 #include "../capi_frontend/capi_utils.hpp"
+#include "../capi_frontend/inferencerequest.hpp"
+#include "../capi_frontend/inferencetensor.hpp"
 #include "../deserialization.hpp"
-#include "../inferencerequest.hpp"
-#include "../inferencetensor.hpp"
 #include "../kfs_frontend/kfs_utils.hpp"
 #include "../tfs_frontend/tfs_utils.hpp"
 #include "test_utils.hpp"
-
-#include <gmock/gmock-generated-function-mockers.h>
 
 using TFTensorProto = tensorflow::TensorProto;
 
@@ -166,6 +164,8 @@ TEST_F(CAPIPredictRequest, ShouldSuccessForSupportedPrecision) {
 class DeserializeCAPITensor : public CAPIPredict {};
 class DeserializeCAPITensorProtoNegative : public CAPIPredict {};
 
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(GRPCPredictRequest);
+
 class GRPCPredictRequest : public TensorflowGRPCPredict {
 public:
     void SetUp() {
@@ -237,6 +237,9 @@ public:
 
 MockTensorProtoDeserializatorThrowingInferenceEngine* MockTensorProtoDeserializator::mock = nullptr;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 TEST_F(GRPCPredictRequestNegative, ShouldReturnDeserializationErrorForSetTensorException2) {
     ov::Core ieCore;
     std::shared_ptr<ov::Model> model = ieCore.read_model(std::filesystem::current_path().u8string() + "/src/test/dummy/1/dummy.xml");
@@ -254,6 +257,8 @@ TEST_F(GRPCPredictRequestNegative, ShouldReturnDeserializationErrorForSetTensorE
         request, tensorMap, inputSink, isPipeline);
     EXPECT_EQ(status, ovms::StatusCode::OV_INTERNAL_DESERIALIZATION_ERROR) << status.string();
 }
+
+#pragma GCC diagnostic pop
 
 TEST_F(GRPCPredictRequest, ShouldSuccessForSupportedPrecision) {
     ov::Core ieCore;
@@ -475,8 +480,7 @@ TEST_F(KserveGRPCPredictRequest, ShouldSuccessForSupportedPrecision) {
     ov::InferRequest inferRequest = compiledModel.create_infer_request();
     InputSink<ov::InferRequest&> inputSink(inferRequest);
     auto status = deserializePredictRequest<ConcreteTensorProtoDeserializator>(request, tensorMap, inputSink, isPipeline);
-    EXPECT_TRUE(status.ok());
-    std::cout << status.string();
+    EXPECT_EQ(status, ovms::StatusCode::OK) << status.string();
 }
 
 class KserveGRPCPredictRequestNegative : public KserveGRPCPredictRequest {
@@ -520,6 +524,9 @@ std::string toString(const std::pair<ovms::Precision, bool>& pair) {
     return toString(pair.first) + "_" + (pair.second ? "BufferInRequestRawInputContents" : "BufferInRequestTensorInputContents");
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 TEST_F(KserveGRPCPredictRequestNegative, ShouldReturnDeserializationErrorForSetTensorException2) {
     ov::Core ieCore;
     std::shared_ptr<ov::Model> model = ieCore.read_model(std::filesystem::current_path().u8string() + "/src/test/dummy/1/dummy.xml");
@@ -538,6 +545,8 @@ TEST_F(KserveGRPCPredictRequestNegative, ShouldReturnDeserializationErrorForSetT
     EXPECT_EQ(status, ovms::StatusCode::OV_INTERNAL_DESERIALIZATION_ERROR) << status.string();
 }
 
+#pragma GCC diagnostic pop
+
 std::vector<std::pair<ovms::Precision, bool>> KserveGRPCPredictRequestNegativeParams = cartesianProduct(UNSUPPORTED_KFS_INPUT_PRECISIONS, {true, false});
 
 INSTANTIATE_TEST_SUITE_P(
@@ -547,7 +556,6 @@ INSTANTIATE_TEST_SUITE_P(
     [](const ::testing::TestParamInfo<KserveGRPCPredictRequestNegative::ParamType>& info) {
         return toString(info.param);
     });
-
 INSTANTIATE_TEST_SUITE_P(
     TestDeserialize,
     GRPCPredictRequestNegative,
@@ -555,17 +563,6 @@ INSTANTIATE_TEST_SUITE_P(
     [](const ::testing::TestParamInfo<GRPCPredictRequestNegative::ParamType>& info) {
         return toString(info.param);
     });
-
-std::vector<std::pair<ovms::Precision, bool>> KserveGRPCPredictRequestParams = cartesianProduct(SUPPORTED_KFS_INPUT_PRECISIONS, {true, false});
-
-INSTANTIATE_TEST_SUITE_P(
-    TestDeserialize,
-    KserveGRPCPredictRequest,
-    ::testing::ValuesIn(KserveGRPCPredictRequestParams),
-    [](const ::testing::TestParamInfo<KserveGRPCPredictRequest::ParamType>& info) {
-        return toString(info.param);
-    });
-
 INSTANTIATE_TEST_SUITE_P(
     TestDeserialize,
     GRPCPredictRequest,

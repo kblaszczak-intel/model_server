@@ -22,12 +22,11 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <openvino/openvino.hpp>
 
-#include "inferencerequest.hpp"
-#include "inferenceresponse.hpp"
 #include "kfs_frontend/kfs_grpc_inference_service.hpp"
 #include "model_metric_reporter.hpp"
 #include "modelchangesubscription.hpp"
@@ -41,6 +40,8 @@
 namespace ovms {
 class MetricRegistry;
 class ModelInstanceUnloadGuard;
+class InferenceRequest;
+class InferenceResponse;
 class PipelineDefinition;
 class Status;
 template <typename T1, typename T2>
@@ -49,23 +50,23 @@ struct RequestProcessor;
 class DynamicModelParameter {
 public:
     DynamicModelParameter() :
-        batchSize(0),
+        batchSize(std::nullopt),
         shapes({}) {}
     DynamicModelParameter(int batchSize) :
         batchSize(batchSize),
         shapes({}) {}
     DynamicModelParameter(const std::map<std::string, shape_t>& shapes) :
-        batchSize(0),
+        batchSize(std::nullopt),
         shapes(shapes) {}
 
-    bool isBatchSizeRequested() const { return batchSize > 0; }
+    bool isBatchSizeRequested() const { return batchSize.has_value(); }
     bool isShapeRequested(const std::string& name) const { return shapes.count(name) && shapes.at(name).size() > 0; }
 
-    int getBatchSize() const { return batchSize; }
+    int getBatchSize() const { return batchSize.value_or(1); }
     const shape_t& getShape(const std::string& name) const { return shapes.at(name); }
 
 private:
-    int batchSize;
+    std::optional<int> batchSize;
     std::map<std::string, shape_t> shapes;
 };
 
@@ -151,6 +152,11 @@ protected:
       * @brief Stores required tensorflow model files extensions to be able to load model
       */
     static constexpr std::array<const char*, 1> TF_MODEL_FILES_EXTENSIONS{".pb"};
+
+    /**
+      * @brief Stores required tensorflow lite model files extensions to be able to load model
+      */
+    static constexpr std::array<const char*, 1> TFLITE_MODEL_FILES_EXTENSIONS{".tflite"};
 
     /**
          * @brief Notifies model instance users who wait for loading
@@ -273,6 +279,7 @@ private:
          */
     Status loadInputTensors(const ModelConfig& config, const DynamicModelParameter& parameter = DynamicModelParameter());
 
+    Status gatherReshapeInfo(bool isBatchingModeAuto, const DynamicModelParameter& parameter, bool& isReshapeRequired, std::map<std::string, ov::PartialShape>& modelShapes);
     /**
          * @brief Internal method for loading outputs
          *
@@ -421,8 +428,12 @@ public:
          *
          * @return batch size
          */
-    virtual Dimension getBatchSize() const {
-        return Dimension(ov::get_batch(model));
+    virtual std::optional<Dimension> getBatchSize() const {
+        try {
+            return Dimension(ov::get_batch(model));
+        } catch (...) {
+            return std::nullopt;
+        }
     }
 
     const size_t getBatchSizeIndex() const;
@@ -444,6 +455,8 @@ public:
     virtual const tensor_map_t& getInputsInfo() const {
         return inputsInfo;
     }
+
+    virtual ov::AnyMap getRTInfo() const;
 
     /**
          * @brief Get the Outputs Info object

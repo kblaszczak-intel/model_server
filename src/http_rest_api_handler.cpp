@@ -92,7 +92,7 @@ const std::string HttpRestApiHandler::kfs_serverliveRegexExp =
 const std::string HttpRestApiHandler::kfs_servermetadataRegexExp =
     R"(/v2)";
 
-const std::string HttpRestApiHandler::metricsRegexExp = R"((.?)\/metrics)";
+const std::string HttpRestApiHandler::metricsRegexExp = R"((.?)\/metrics(\?(.*))?)";
 
 HttpRestApiHandler::HttpRestApiHandler(ovms::Server& ovmsServer, int timeout_in_ms) :
     predictionRegex(predictionRegexExp),
@@ -492,6 +492,8 @@ Status HttpRestApiHandler::processModelMetadataKFSRequest(const HttpRequestCompo
     }
     std::string output;
     google::protobuf::util::JsonPrintOptions opts;
+    // This parameter forces JSON writer to not omit empty shape in case of scalar tensor
+    opts.always_print_primitive_fields = true;
     google::protobuf::util::Status status = google::protobuf::util::MessageToJsonString(grpc_response, &output, opts);
     if (!status.ok()) {
         return StatusCode::JSON_SERIALIZATION_ERROR;
@@ -575,8 +577,17 @@ Status HttpRestApiHandler::parseRequestComponents(HttpRequestComponents& request
             requestComponents.type = ConfigReload;
             return StatusCode::OK;
         }
-        if (std::regex_match(request_path, sm, modelstatusRegex))
-            return StatusCode::REST_UNSUPPORTED_METHOD;
+        return (std::regex_match(request_path, sm, modelstatusRegex) ||
+                   std::regex_match(request_path, sm, kfs_serverliveRegex) ||
+                   std::regex_match(request_path, sm, configStatusRegex) ||
+                   std::regex_match(request_path, sm, kfs_serverreadyRegex) ||
+                   std::regex_match(request_path, sm, kfs_servermetadataRegex) ||
+                   std::regex_match(request_path, sm, kfs_modelmetadataRegex) ||
+                   std::regex_match(request_path, sm, kfs_modelreadyRegex) ||
+                   std::regex_match(request_path, sm, metricsRegex))
+                   ? StatusCode::REST_UNSUPPORTED_METHOD
+                   : StatusCode::REST_INVALID_URL;
+
     } else if (http_method == "GET") {
         if (std::regex_match(request_path, sm, modelstatusRegex)) {
             requestComponents.model_name = sm[2];
@@ -635,9 +646,18 @@ Status HttpRestApiHandler::parseRequestComponents(HttpRequestComponents& request
         if (std::regex_match(request_path, sm, predictionRegex))
             return StatusCode::REST_UNSUPPORTED_METHOD;
         if (std::regex_match(request_path, sm, metricsRegex)) {
+            std::string params = sm[3];
+            if (!params.empty()) {
+                SPDLOG_DEBUG("Discarded following url parameters: {}", params);
+            }
             requestComponents.type = Metrics;
             return StatusCode::OK;
         }
+        return (std::regex_match(request_path, sm, predictionRegex) ||
+                   std::regex_match(request_path, sm, kfs_inferRegex, std::regex_constants::match_any) ||
+                   std::regex_match(request_path, sm, configReloadRegex))
+                   ? StatusCode::REST_UNSUPPORTED_METHOD
+                   : StatusCode::REST_INVALID_URL;
     }
     return StatusCode::REST_INVALID_URL;
 }
@@ -712,8 +732,12 @@ Status HttpRestApiHandler::processPredictRequest(
 
     timer.stop(TOTAL);
     double requestTime = timer.elapsed<std::chrono::microseconds>(TOTAL);
-    OBSERVE_IF_ENABLED(reporterOut->requestTimeRest, requestTime);
     SPDLOG_DEBUG("Total REST request processing time: {} ms", requestTime / 1000);
+    if (!reporterOut) {
+        return StatusCode::OK;
+        // TODO fix after Mediapipe metrics implementation
+    }
+    OBSERVE_IF_ENABLED(reporterOut->requestTimeRest, requestTime);
     return StatusCode::OK;
 }
 

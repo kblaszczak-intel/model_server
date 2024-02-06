@@ -62,11 +62,11 @@ Status Node::fetchResults(session_key_t sessionId, SessionResults& nodeSessionOu
     OVMS_PROFILE_FUNCTION();
     auto it = nodeSessions.find(sessionId);
 
-    auto& nodeSession = it->second;
     if (it == nodeSessions.end()) {
         SPDLOG_LOGGER_ERROR(dag_executor_logger, "Could not find session: {} for node: {}", sessionId, getName());
         return StatusCode::UNKNOWN_ERROR;
     }
+    auto& nodeSession = it->second;
     auto status = fetchResults(*nodeSession, nodeSessionOutputs);
     if (status.ok() && demultiplexCount) {
         SPDLOG_LOGGER_DEBUG(dag_executor_logger, "Will demultiply node: {} outputs with demultiplyCount: {}", getName(), demultiplyCountSettingToString(demultiplexCount));
@@ -269,7 +269,7 @@ Status Node::demultiplyOutputs(SessionResults& nodeSessionOutputs) {
 }
 
 Status Node::createShardedTensor(ov::Tensor& dividedTensor, Precision precision, const shape_t& shape, const ov::Tensor& tensor, size_t i, size_t step, const NodeSessionMetadata& metadata, const std::string tensorName) {
-    dividedTensor = createSharedTensor(tensor.get_element_type(), shape, (char*)(tensor.data()) + i * step);
+    dividedTensor = createTensorWithNoDataOwnership(tensor.get_element_type(), shape, (char*)(tensor.data()) + i * step);
     return StatusCode::OK;
 }
 }  // namespace ovms

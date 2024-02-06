@@ -1,6 +1,6 @@
 # KServe API usage samples
 
-OpenVINO Model Server introduced support for [KServe API](https://github.com/kserve/kserve/tree/master/docs/predict-api/v2), including [Triton](https://github.com/triton-inference-server)'s raw format externsion.
+OpenVINO Model Server introduced support for [KServe API](https://github.com/kserve/kserve/tree/master/docs/predict-api/v2), including [Triton](https://github.com/triton-inference-server)'s raw format extension.
 
 This guide shows how to interact with KServe API endpoints on both gRPC and HTTP interfaces using [Triton](https://github.com/triton-inference-server)'s client library. It covers following topics:
 - <a href="#grpc-api">GRPC API Examples </a>
@@ -23,6 +23,11 @@ This guide shows how to interact with KServe API endpoints on both gRPC and HTTP
   - <a href="#http-model-async-infer-resnet">http_async_infer_resnet</a>
 
 ## Before you run the samples
+
+## Install necessary packages
+```
+apt-get update && apt-get install cmake build-essential libssl-dev zlib1g-dev git rapidjson-dev python3
+```
 
 ### Clone OpenVINO&trade; Model Server GitHub repository and go to the top directory.
 ```Bash

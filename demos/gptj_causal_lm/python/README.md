@@ -1,4 +1,6 @@
-# GPT-J Causal Language Modeling Demo {#ovms_demo_gptj_causal_lm}
+# [DEPRECATED] GPT-J Causal Language Modeling Demo {#ovms_demo_gptj_causal_lm}
+
+**This demo is deprecated and will be removed in 2024.0. Check out new [python demos](../../python_demos) for latest examples with language models.**
 
 ### Introduction
 This demo illustrates usage of GPT-like models in OpenVINO™ Model Server. GPT-J 6B model used in this example can be found at [huggingface](https://huggingface.co/EleutherAI/gpt-j-6B) (~25GB). Steps below automate download and conversion steps to be able to load it using OpenVINO™. Example python client provided at the end of the document requests Model Server for the next word of the sentence until `EOS` (end of sequence) token is received. 
@@ -24,26 +26,17 @@ The script downloads the model using `transformers` pip library, loads into the 
 > NOTE: Loading the model into CPU device takes ~48GB of RAM. Read more in the [model specification](https://huggingface.co/docs/transformers/v4.15.0/model_doc/gptj#overview).
 
 ### Convert the model
-The model needs to be converted to ONNX format in order to load in OVMS:
+The model needs to be converted to IR format in order to load in OVMS:
 ```bash
 chmod +x convert_model.sh && ./convert_model.sh
 ```
-The model will reside in `onnx/1` directory.
+The model will reside in `model/1` directory.
 
-The script should provide result confirming successful model conversion:
-```bash
-Validating ONNX model...
-        -[✓] ONNX model output names match reference model ({'logits'})
-        - Validating ONNX Model output "logits":
-                -[✓] (3, 9, 50400) matches (3, 9, 50400)
-                -[✓] all values close (atol: 0.0001)
-All good, model saved at: onnx/1/model.onnx
-```
 
 ### Start OVMS with prepared GPT-J-6b model
 
 ```bash
-docker run -d --rm -p 9000:9000 -v $(pwd)/onnx:/model:ro openvino/model_server \
+docker run -d --rm -p 9000:9000 -v $(pwd)/model:/model:ro openvino/model_server \
     --port 9000 \
     --model_name gpt-j-6b \
     --model_path /model \
@@ -104,13 +97,17 @@ predicted word:  a
 
 # Pipeline mode with server side tokenization and detokenization
 
-This variant offloads tokenizaton and detokenization step from client to the server. OVMS can convert string proto to `2D U8` tensor and pass the data to tokenization custom node. This way we generate tokens for `gpt-j-6b` model automatically and get the response as text instead of probability vector.
+This variant offloads tokenization and detokenization step from client to the server. OVMS can convert string proto to `2D U8` tensor and pass the data to tokenization custom node. This way we generate tokens for `gpt-j-6b` model automatically and get the response as text instead of probability vector.
 
 ![diagram](../../../src/custom_nodes/tokenizer/diagram.svg)
 
 ## Prepare environment
 
 Use `make` command to prepare custom node libraries, blingfire tokenization models and configuration file.
+
+Since custom node used in this demo is included in OpenVINO Model Server image you can either use the custom node from the image, or build one.
+
+If you just want to quickly run this demo and use already compiled custom node, run:
 
 ```bash
 make
@@ -122,21 +119,37 @@ Workspace should look as follows:
 tree workspace 
 workspace
 ├── config.json
+└── tokenizers
+    ├── gpt2.bin
+    └── gpt2.i2w
+
+1 directory, 3 files
+```
+
+(Optional) If you modified the custom node or for some other reason, you want to have it compiled and then attached to the container, run:
+
+```bash
+make BUILD_CUSTOM_NODE=true BASE_OS=ubuntu
+```
+
+Workspace will look as follows:
+
+```bash
+workspace
+├── config.json
 ├── lib
 │   ├── libdetokenizer.so
 │   └── libtokenizer.so
 └── tokenizers
     ├── gpt2.bin
     └── gpt2.i2w
-
-2 directories, 5 files
 ```
 
 Start OVMS with prepared workspace:
 
 ```bash
 docker run -d --rm -p 9000:9000 \
-    -v $(pwd)/onnx:/onnx:ro \
+    -v $(pwd)/model:/onnx:ro \
     -v $(pwd)/workspace:/workspace:ro \
     openvino/model_server \
     --port 9000 \
@@ -153,6 +166,7 @@ Run example client:
 
 ```bash
 python3 dag_client.py --url localhost:9000 --model_name my_gpt_pipeline --input "Neurons are fascinating"
-
-0.5515012741088867 Neurons are fascinating cells that are responsible for the transmission of information from one brain region to another. They are also responsible for the production of hormones and neurotransmitters that are responsible for the regulation of mood, sleep, appetite, and sexual function.
+b'Neurons are fascinating cells that are responsible for the transmission of information from one brain region to another. They are also responsible for the production of hormones and neurotransmitters that are responsible for the regulation of mood, sleep, appetite, and sexual function.\n'
 ```
+
+![demo](./gpt-demo.gif)

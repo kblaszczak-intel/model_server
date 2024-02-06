@@ -1,6 +1,6 @@
 pipeline {
     agent {
-      label 'ovmscheck'
+      label 'ovms-coordinator'
     }
     stages {
         stage('Configure') {
@@ -27,11 +27,7 @@ pipeline {
 
         stage("Run smoke and regression tests on commit") {
           steps {
-              sh """
-              env
-              """
-              echo shortCommit
-              build job: "ovmsc/util-common/ovmsc-test-on-commit", parameters: [[$class: 'StringParameterValue', name: 'OVMSCCOMMIT', value: shortCommit]]
+              sh 'make docker_build'
           }    
         }
     }

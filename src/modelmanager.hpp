@@ -33,9 +33,11 @@
 
 #include "dags/pipeline_factory.hpp"
 #include "global_sequences_viewer.hpp"
+#if (MEDIAPIPE_DISABLE == 0)
+#include "mediapipe_internal/mediapipefactory.hpp"
+#endif
 #include "metric_config.hpp"
 #include "model.hpp"
-#include "modelconfig.hpp"
 #include "status.hpp"
 
 namespace ovms {
@@ -48,9 +50,12 @@ class CNLIMWrapper;
 class CustomLoaderConfig;
 class CustomNodeLibraryManager;
 class MetricRegistry;
+class ModelConfig;
 class FileSystem;
+class MediapipeGraphExecutor;
 struct FunctorSequenceCleaner;
 struct FunctorResourcesCleaner;
+class PythonBackend;
 /**
  * @brief Model manager is managing the list of model topologies enabled for serving and their versions.
  */
@@ -59,7 +64,7 @@ public:
     /**
      * @brief A default constructor is private
      */
-    ModelManager(const std::string& modelCacheDirectory = "", MetricRegistry* registry = nullptr);
+    ModelManager(const std::string& modelCacheDirectory = "", MetricRegistry* registry = nullptr, PythonBackend* pythonBackend = nullptr);
 
 protected:
     void logPluginConfiguration();
@@ -76,30 +81,33 @@ protected:
     std::unique_ptr<ov::Core> ieCore;
 
     PipelineFactory pipelineFactory;
-
+#if (MEDIAPIPE_DISABLE == 0)
+    MediapipeFactory mediapipeFactory;
+#endif
     std::unique_ptr<CustomNodeLibraryManager> customNodeLibraryManager;
-
     std::vector<std::shared_ptr<CNLIMWrapper>> resources = {};
-
     GlobalSequencesViewer globalSequencesViewer;
     uint32_t waitForModelLoadedTimeoutMs;
+
+private:
     bool watcherStarted = false;
     bool cleanerStarted = false;
 
-private:
-    /**
-     * @brief 
-     * 
-     */
     ModelManager(const ModelManager&) = delete;
 
     Status lastLoadConfigStatus = StatusCode::OK;
 
-    std::string getConfigFileMD5();
     Status cleanupModelTmpFiles(ModelConfig& config);
     Status reloadModelVersions(std::shared_ptr<ovms::Model>& model, std::shared_ptr<FileSystem>& fs, ModelConfig& config, std::shared_ptr<model_versions_t>& versionsToReload, std::shared_ptr<model_versions_t> versionsFailed);
     Status addModelVersions(std::shared_ptr<ovms::Model>& model, std::shared_ptr<FileSystem>& fs, ModelConfig& config, std::shared_ptr<model_versions_t>& versionsToStart, std::shared_ptr<model_versions_t> versionsFailed);
+    Status loadModels(const rapidjson::Value::MemberIterator& modelsConfigList, std::vector<ModelConfig>& gatedModelConfigs, std::set<std::string>& modelsInConfigFile, std::set<std::string>& modelsWithInvalidConfig, std::unordered_map<std::string, ModelConfig>& newModelConfigs, const std::string& rootDirectoryPath);
+#if (MEDIAPIPE_DISABLE == 0)
+    Status processMediapipeConfig(const MediapipeGraphConfig& config, std::set<std::string>& mediapipesInConfigFile, MediapipeFactory& factory);
+    Status loadMediapipeGraphsConfig(std::vector<MediapipeGraphConfig>& mediapipesInConfigFile);
+    Status loadModelsConfig(rapidjson::Document& configJson, std::vector<ModelConfig>& gatedModelConfigs, std::vector<ovms::MediapipeGraphConfig>& mediapipesInConfigFile);
+#else
     Status loadModelsConfig(rapidjson::Document& configJson, std::vector<ModelConfig>& gatedModelConfigs);
+#endif
     Status tryReloadGatedModelConfigs(std::vector<ModelConfig>& gatedModelConfigs);
     Status loadCustomNodeLibrariesConfig(rapidjson::Document& configJson);
     Status loadPipelinesConfig(rapidjson::Document& configJson);
@@ -178,11 +186,14 @@ private:
      */
     mutable std::recursive_mutex configMtx;
 
+protected:
     /**
      * Time interval between each config file check
      */
-    uint watcherIntervalSec = 1;
+    uint watcherIntervalMillisec = 1000;
+    const int WRONG_CONFIG_FILE_RETRY_DELAY_MS = 10;
 
+private:
     /**
      * Time interval between two consecutive sequence cleanup scans (in minutes)
      */
@@ -205,7 +216,38 @@ private:
 
     MetricRegistry* metricRegistry;
 
+    PythonBackend* pythonBackend;
+
+    /**
+     * @brief Json config directory path
+     *
+     */
+    std::string rootDirectoryPath;
+
+    /**
+     * @brief Set json config directory path
+     *
+     * @param configFileFullPath
+     */
+    void setRootDirectoryPath(const std::string& configFileFullPath);
+
 public:
+    /**
+     * @brief Get the full path from relative or full path
+     *
+     * @return const std::string&
+     */
+    const std::string getFullPath(const std::string& pathToCheck) const;
+
+    /**
+     * @brief Get the config root path 
+     *
+     * @return const std::string&
+     */
+    const std::string getRootDirectoryPath() const {
+        return rootDirectoryPath;
+    }
+
     /**
      * @brief Mutex for blocking concurrent add & find of model
      */
@@ -214,8 +256,8 @@ public:
     /**
      *  @brief Gets the watcher interval timestep in seconds
      */
-    uint getWatcherIntervalSec() {
-        return watcherIntervalSec;
+    uint getWatcherIntervalMillisec() {
+        return watcherIntervalMillisec;
     }
 
     /**
@@ -266,6 +308,12 @@ public:
         return pipelineFactory;
     }
 
+#if (MEDIAPIPE_DISABLE == 0)
+    const MediapipeFactory& getMediapipeFactory() const {
+        return mediapipeFactory;
+    }
+#endif
+
     const CustomNodeLibraryManager& getCustomNodeLibraryManager() const;
 
     /**
@@ -312,11 +360,15 @@ public:
 
     template <typename RequestType, typename ResponseType>
     Status createPipeline(std::unique_ptr<Pipeline>& pipeline,
-        const std::string name,
+        const std::string& name,
         const RequestType* request,
         ResponseType* response) {
         return pipelineFactory.create(pipeline, name, request, response, *this);
     }
+    Status createPipeline(std::shared_ptr<MediapipeGraphExecutor>& graph,
+        const std::string& name,
+        const KFSRequest* request,
+        KFSResponse* response);
 
     const bool pipelineDefinitionExists(const std::string& name) const {
         return pipelineFactory.definitionExists(name);
@@ -429,6 +481,8 @@ public:
      * @brief Check if configuration file reload is needed.
      */
     Status configFileReloadNeeded(bool& isNeeded);
+
+    Status parseConfig(const std::string& jsonFilename, rapidjson::Document& configJson);
 
     /**
      * @brief Reads models from configuration file

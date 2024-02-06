@@ -82,6 +82,28 @@ const char* custom_loader_config_model = R"({
       ]
     })";
 
+// config_model_with_customloader
+const char* custom_loader_config_model_relative_paths = R"({
+       "custom_loader_config_list":[
+         {
+          "config":{
+            "loader_name":"sample-loader",
+            "library_path": "libsampleloader.so"
+          }
+         }
+       ],
+      "model_config_list":[
+        {
+          "config":{
+            "name":"dummy",
+            "base_path": "test_cl_models/model1",
+            "nireq": 1,
+            "custom_loader_options": {"loader_name":  "sample-loader", "model_file":  "dummy.xml", "bin_file": "dummy.bin"}
+          }
+        }
+      ]
+    })";
+
 // config_no_model_with_customloader
 const char* custom_loader_config_model_deleted = R"({
        "custom_loader_config_list":[
@@ -454,7 +476,7 @@ TEST_F(TestCustomLoader, CustomLoaderConfigMatchingSchema) {
 
     rapidjson::Document customloaderConfigMatchingSchemaParsed;
     customloaderConfigMatchingSchemaParsed.Parse(customloaderConfigMatchingSchema);
-    auto result = ovms::validateJsonAgainstSchema(customloaderConfigMatchingSchemaParsed, ovms::MODELS_CONFIG_SCHEMA);
+    auto result = ovms::validateJsonAgainstSchema(customloaderConfigMatchingSchemaParsed, ovms::MODELS_CONFIG_SCHEMA.c_str());
     EXPECT_EQ(result, ovms::StatusCode::OK);
 }
 
@@ -475,7 +497,7 @@ TEST_F(TestCustomLoader, CustomLoaderConfigMissingLoaderName) {
 
     rapidjson::Document customloaderConfigMissingLoaderNameParsed;
     customloaderConfigMissingLoaderNameParsed.Parse(customloaderConfigMissingLoaderName);
-    auto result = ovms::validateJsonAgainstSchema(customloaderConfigMissingLoaderNameParsed, ovms::MODELS_CONFIG_SCHEMA);
+    auto result = ovms::validateJsonAgainstSchema(customloaderConfigMissingLoaderNameParsed, ovms::MODELS_CONFIG_SCHEMA.c_str());
     EXPECT_EQ(result, ovms::StatusCode::JSON_INVALID);
 }
 
@@ -496,7 +518,7 @@ TEST_F(TestCustomLoader, CustomLoaderConfigMissingLibraryPath) {
 
     rapidjson::Document customloaderConfigMissingLibraryPathParsed;
     customloaderConfigMissingLibraryPathParsed.Parse(customloaderConfigMissingLibraryPath);
-    auto result = ovms::validateJsonAgainstSchema(customloaderConfigMissingLibraryPathParsed, ovms::MODELS_CONFIG_SCHEMA);
+    auto result = ovms::validateJsonAgainstSchema(customloaderConfigMissingLibraryPathParsed, ovms::MODELS_CONFIG_SCHEMA.c_str());
     EXPECT_EQ(result, ovms::StatusCode::JSON_INVALID);
 }
 
@@ -517,7 +539,7 @@ TEST_F(TestCustomLoader, CustomLoaderConfigMissingLoaderConfig) {
 
     rapidjson::Document customloaderConfigMissingLoaderConfigParsed;
     customloaderConfigMissingLoaderConfigParsed.Parse(customloaderConfigMissingLoaderConfig);
-    auto result = ovms::validateJsonAgainstSchema(customloaderConfigMissingLoaderConfigParsed, ovms::MODELS_CONFIG_SCHEMA);
+    auto result = ovms::validateJsonAgainstSchema(customloaderConfigMissingLoaderConfigParsed, ovms::MODELS_CONFIG_SCHEMA.c_str());
     EXPECT_EQ(result, ovms::StatusCode::OK);
 }
 
@@ -538,7 +560,7 @@ TEST_F(TestCustomLoader, CustomLoaderConfigInvalidCustomLoaderConfig) {
 
     rapidjson::Document customloaderConfigInvalidCustomLoaderConfigParsed;
     customloaderConfigInvalidCustomLoaderConfigParsed.Parse(customloaderConfigInvalidCustomLoaderConfig);
-    auto result = ovms::validateJsonAgainstSchema(customloaderConfigInvalidCustomLoaderConfigParsed, ovms::MODELS_CONFIG_SCHEMA);
+    auto result = ovms::validateJsonAgainstSchema(customloaderConfigInvalidCustomLoaderConfigParsed, ovms::MODELS_CONFIG_SCHEMA.c_str());
     EXPECT_EQ(result, ovms::StatusCode::JSON_INVALID);
 }
 
@@ -559,7 +581,7 @@ TEST_F(TestCustomLoader, CustomLoaderConfigMissingLoaderNameInCustomLoaderOption
 
     rapidjson::Document customloaderConfigMissingLoaderNameInCustomLoaderOptionsParsed;
     customloaderConfigMissingLoaderNameInCustomLoaderOptionsParsed.Parse(customloaderConfigMissingLoaderNameInCustomLoaderOptions);
-    auto result = ovms::validateJsonAgainstSchema(customloaderConfigMissingLoaderNameInCustomLoaderOptionsParsed, ovms::MODELS_CONFIG_SCHEMA);
+    auto result = ovms::validateJsonAgainstSchema(customloaderConfigMissingLoaderNameInCustomLoaderOptionsParsed, ovms::MODELS_CONFIG_SCHEMA.c_str());
     EXPECT_EQ(result, ovms::StatusCode::JSON_INVALID);
 }
 
@@ -580,7 +602,7 @@ TEST_F(TestCustomLoader, CustomLoaderConfigMultiplePropertiesInCustomLoaderOptio
 
     rapidjson::Document customloaderConfigMultiplePropertiesInCustomLoaderOptionsParsed;
     customloaderConfigMultiplePropertiesInCustomLoaderOptionsParsed.Parse(customloaderConfigMultiplePropertiesInCustomLoaderOptions);
-    auto result = ovms::validateJsonAgainstSchema(customloaderConfigMultiplePropertiesInCustomLoaderOptionsParsed, ovms::MODELS_CONFIG_SCHEMA);
+    auto result = ovms::validateJsonAgainstSchema(customloaderConfigMultiplePropertiesInCustomLoaderOptionsParsed, ovms::MODELS_CONFIG_SCHEMA.c_str());
     EXPECT_EQ(result, ovms::StatusCode::OK);
 }
 
@@ -603,6 +625,27 @@ TEST_F(TestCustomLoader, CustomLoaderPrediction) {
     preparePredictRequest(request,
         {{DUMMY_MODEL_INPUT_NAME,
             std::tuple<ovms::signed_shape_t, ovms::Precision>{{1, 10}, ovms::Precision::FP32}}});
+    performPredict("dummy", 1, request);
+}
+
+TEST_F(TestCustomLoader, CustomLoaderPredictionRelativePath) {
+    // Copy dummy model to temporary destination
+    std::filesystem::copy("/ovms/src/test/dummy", cl_model_1_path, std::filesystem::copy_options::recursive);
+    std::filesystem::copy("/ovms/bazel-bin/src/libsampleloader.so", cl_models_path, std::filesystem::copy_options::recursive);
+
+    // Replace model path in the config string
+    std::string configStr = custom_loader_config_model_relative_paths;
+    configStr.replace(configStr.find("test_cl_models"), std::string("test_cl_models").size(), cl_models_path);
+
+    // Create config file
+    std::string fileToReload = cl_models_path + "/cl_config.json";
+    createConfigFileWithContent(configStr, fileToReload);
+    ASSERT_EQ(manager.loadConfig(fileToReload), ovms::StatusCode::OK);
+
+    tensorflow::serving::PredictRequest request;
+    preparePredictRequest(request,
+        {{DUMMY_MODEL_INPUT_NAME,
+            std::tuple<signed_shape_t, ovms::Precision>{{1, 10}, ovms::Precision::FP32}}});
     performPredict("dummy", 1, request);
 }
 
@@ -954,7 +997,8 @@ TEST_F(TestCustomLoader, CustomLoaderGetMetaData) {
        "name": "a"
       }
      },
-     "methodName": ""
+     "methodName": "",
+     "defaults": {}
     }
    }
   }

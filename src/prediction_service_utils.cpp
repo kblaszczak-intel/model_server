@@ -17,10 +17,10 @@
 
 #include <map>
 
+#include "capi_frontend/inferencerequest.hpp"
+#include "capi_frontend/inferencetensor.hpp"
 #include "deserialization.hpp"
 #include "executingstreamidguard.hpp"
-#include "inferencerequest.hpp"
-#include "inferencetensor.hpp"
 #include "modelinstance.hpp"
 #include "modelinstanceunloadguard.hpp"
 #include "modelmanager.hpp"
@@ -121,7 +121,7 @@ bool useSharedOutputContentFn(const tensorflow::serving::PredictRequest* request
 }
 
 bool useSharedOutputContentFn(const ::KFSRequest* request) {
-    return request->raw_input_contents().size() > 0;
+    return true;
 }
 
 bool useSharedOutputContentFn(const InferenceRequest* request) {

@@ -23,6 +23,7 @@
 #include <rapidjson/writer.h>
 #include <spdlog/spdlog.h>
 
+#include "filesystem.hpp"
 #include "status.hpp"
 #include "stringutils.hpp"
 
@@ -47,6 +48,11 @@ private:
          * @brief Custom Loader Config Path
          */
     std::string loaderConfigFile;
+
+    /**
+         * @brief Json config directory path
+         */
+    std::string rootDirectoryPath;
 
 public:
     /**
@@ -103,7 +109,16 @@ public:
          * @param libraryPath
          */
     void setLibraryPath(const std::string& libraryPath) {
-        this->libraryPath = libraryPath;
+        FileSystem::setPath(this->libraryPath, libraryPath, this->rootDirectoryPath);
+    }
+
+    /**
+         * @brief Set root directory path
+         *
+         * @param rootDirectoryPath
+         */
+    void setRootDirectoryPath(const std::string& rootDirectoryPath) {
+        this->rootDirectoryPath = rootDirectoryPath;
     }
 
     /**
@@ -135,6 +150,9 @@ public:
             this->setLibraryPath(v["library_path"].GetString());
             if (v.HasMember("loader_config_file"))
                 this->setLoaderConfigFile(v["loader_config_file"].GetString());
+        } catch (std::logic_error& e) {
+            SPDLOG_DEBUG("Relative path error: {}", e.what());
+            return StatusCode::INTERNAL_ERROR;
         } catch (...) {
             SPDLOG_ERROR("There was an error parsing the custom loader config");
             return StatusCode::JSON_INVALID;

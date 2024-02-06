@@ -96,6 +96,7 @@ def check_dir(start_dir):
         'increment_1x3x4x5.xml',
         'index.html',
         'input_images.txt',
+        'third_party/python/BUILD',
         'libevent/BUILD',
         'listen.patch',
         'metrics_output.out',
@@ -110,6 +111,7 @@ def check_dir(start_dir):
         'rest_sdk_v2.10.16.patch',
         'summator.xml',
         'tf.patch',
+        'tf_graph_info_multilinecomment.patch',
         'tftext.patch',
         'vehicle_images.txt',
         'bazel_rules_apple.patch',
@@ -117,9 +119,19 @@ def check_dir(start_dir):
         "go.sum",
         "mwaitpkg.patch",
         'saved_model.pb',
+        'tflite',
+        "yarn.lock",
+        "BUILD.bazel",
+        "package.json",
+        "graph.pbtxt",
+        "holistic_tracking.pbtxt",
+        "ssdlite_object_detection_labelmap.txt",
+        "build_dependencies.sh",
+        "iris_tracking.pbtxt",
+        "graph_two_inputs_model.pbtxt"
         ]
 
-    exclude_directories = ['/dist/', 'extras/ovms-operator', 'extras/openvino-operator-openshift', 'release_files/thirdparty-licenses']
+    exclude_directories = ['/dist/', 'release_files/thirdparty-licenses']
 
     for (d_path, _, file_set) in os.walk(start_dir):
         for f_name in file_set:
@@ -175,6 +187,7 @@ def check_func(start_dir):
         'passthrough.xml',
         'forbidden_functions.txt',
         'input_images.txt',
+        'third_party/python/BUILD',
         'libevent/BUILD',
         'libuuid.LICENSE.txt',
         'license.txt',
@@ -190,12 +203,19 @@ def check_func(start_dir):
         'rest_sdk_v2.10.16.patch',
         'summator.xml',
         'tf.patch',
+        'tf_graph_info_multilinecomment.patch',
         'tftext.patch',
         'zlib.LICENSE.txt',
         'bazel_rules_apple.patch',
+        'yarn.lock',
+        'BUILD.bazel',
+        'package.json',
+        'graph.pbtxt',
+        "build_dependencies.sh",
+        "iris_tracking.pbtxt",
     ]
 
-    exclude_directories = ['/dist/', 'extras/ovms-operator']
+    exclude_directories = ['/dist/']
 
     for (d_path, _, file_set) in os.walk(start_dir):
         for f_name in file_set:

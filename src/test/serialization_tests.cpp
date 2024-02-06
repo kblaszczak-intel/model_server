@@ -29,14 +29,12 @@
 #include "tensorflow_serving/apis/prediction_service.grpc.pb.h"
 #pragma GCC diagnostic pop
 
-#include "../buffer.hpp"
-#include "../inferenceresponse.hpp"
-#include "../inferencetensor.hpp"
+#include "../capi_frontend/buffer.hpp"
+#include "../capi_frontend/inferenceresponse.hpp"
+#include "../capi_frontend/inferencetensor.hpp"
 #include "../serialization.hpp"
 #include "../tfs_frontend/tfs_utils.hpp"
 #include "test_utils.hpp"
-
-#include <gmock/gmock-generated-function-mockers.h>
 
 using TFTensorProto = tensorflow::TensorProto;
 
@@ -87,12 +85,11 @@ const std::vector<ovms::Precision> UNSUPPORTED_OUTPUT_PRECISIONS{
 };
 
 const std::vector<ovms::Precision> SUPPORTED_KFS_OUTPUT_PRECISIONS{
-    // ovms::Precision::UNDECIFIED,
+    // ovms::Precision::UNDEFINED,
     // ovms::Precision::MIXED,
     ovms::Precision::FP64,
     ovms::Precision::FP32,
     ovms::Precision::FP16,
-    // InferenceEngine::Precision::Q78,
     ovms::Precision::I16,
     ovms::Precision::U8,
     ovms::Precision::I8,
@@ -107,12 +104,13 @@ const std::vector<ovms::Precision> SUPPORTED_KFS_OUTPUT_PRECISIONS{
 };
 
 const std::vector<ovms::Precision> UNSUPPORTED_KFS_OUTPUT_PRECISIONS{
-    // ovms::Precision::UNDEFINED, // Cannot create tensor with such precision
+    ovms::Precision::UNDEFINED,  // Cannot create tensor with such precision
+    ovms::Precision::DYNAMIC,    // Cannot create tensor with such precision
     // ovms::Precision::MIXED, // Cannot create tensor with such precision
     // ovms::Precision::FP64,
     // ovms::Precision::FP32,
     // ovms::Precision::FP16,
-    // ovms::Precision::Q78, // Cannot create tensor with such precision
+    ovms::Precision::Q78,  // Cannot create ov tensor with such precision
     // ovms::Precision::I16,
     // ovms::Precision::U8,
     // ovms::Precision::I8,
@@ -121,7 +119,7 @@ const std::vector<ovms::Precision> UNSUPPORTED_KFS_OUTPUT_PRECISIONS{
     // ovms::Precision::I64,
     // ovms::Precision::U32,
     // ovms::Precision::U64,
-    // ovms::Precision::BIN, // Cannot create tensor with such precision
+    ovms::Precision::BIN,  // Cannot create ov tensor with such precision
     // ovms::Precision::BOOL
     // ovms::Precision::CUSTOM)
 };
@@ -467,8 +465,9 @@ TEST_P(SerializeKFSInferOutputTensor, SerializeTensorProtoShouldSucceedForPrecis
 
 class SerializeKFSInferOutputTensorNegative : public SerializeKFSInferOutputTensor {};
 
-TEST_P(SerializeKFSInferOutputTensorNegative, SerializeTensorProtoShouldFailForPrecision) {
+TEST_P(SerializeKFSInferOutputTensorNegative, SerializeTensorProtoRawShouldFailForPrecision) {
     ovms::Precision testedPrecision = GetParam();
+    GTEST_SKIP() << "Cannot create ov Tensor with precision: " << toString(testedPrecision);
     auto inputs = getInputs(testedPrecision);
     KFSResponse response;
     ProtoGetter<::KFSResponse*, ::KFSResponse::InferOutputTensor&> protoGetter(&response);
@@ -484,8 +483,9 @@ TEST_P(SerializeKFSInferOutputTensorNegative, SerializeTensorProtoShouldFailForP
         << "should fail";
 }
 
-TEST_P(SerializeKFSInferOutputTensorNegative, SerializeTensorProtoShouldFailedForPrecision) {
+TEST_P(SerializeKFSInferOutputTensorNegative, SerializeTensorProtoShouldFailForPrecision) {
     ovms::Precision testedPrecision = GetParam();
+    GTEST_SKIP() << "Cannot create ov Tensor with precision: " << toString(testedPrecision);
     auto inputs = getInputs(testedPrecision);
     KFSResponse response;
     ProtoGetter<::KFSResponse*, ::KFSResponse::InferOutputTensor&> protoGetter(&response);
@@ -777,7 +777,7 @@ TYPED_TEST(SerializeString, Valid_2D_U8_String) {
     ovms::tensor_map_t infos;
     infos["out_string"] = std::make_shared<ovms::TensorInfo>("out", "out_string", ovms::Precision::U8, ovms::Shape{-1, -1}, Layout{"N..."});
 
-    bool useSharedOutputContent = false;  // TODO: support raw field
+    bool useSharedOutputContent = true;
     ASSERT_EQ(serializePredictResponse(outputGetter,
                   UNUSED_NAME,
                   UNUSED_VERSION,

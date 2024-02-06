@@ -18,13 +18,14 @@
 #include <string>
 #include <utility>
 
-#include "../inferenceresponse.hpp"
+#include "../capi_frontend/inferenceresponse.hpp"
 #include "../logging.hpp"
 #include "../ov_utils.hpp"
 #include "../serialization.hpp"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wall"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 #include "tensorflow/core/framework/tensor.h"
 #pragma GCC diagnostic pop
 
@@ -33,6 +34,7 @@
 namespace ovms {
 
 const std::string EXIT_NODE_NAME = "response";
+const std::string DEFAULT_PIPELINE_NAME = "";
 
 template <typename ResponseType>
 Status ExitNode<ResponseType>::fetchResults(NodeSession& nodeSession, SessionResults& nodeSessionOutputs) {
