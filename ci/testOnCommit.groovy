@@ -27,11 +27,7 @@ pipeline {
 
         stage("Run smoke and regression tests on commit") {
           steps {
-              sh """
-              env
-              """
-              echo shortCommit
-              build job: "ovmsc/util-common/ovmsc-test-on-commit", parameters: [[$class: 'StringParameterValue', name: 'OVMSCCOMMIT', value: shortCommit],[$class: 'StringParameterValue', name: 'NODE_LABEL', value: 'ovmsoncommit']]
+              sh 'make docker_build'
           }    
         }
     }
