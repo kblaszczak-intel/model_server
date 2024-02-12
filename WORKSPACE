@@ -424,3 +424,10 @@ new_local_repository(
     build_file = "@//third_party/mediapipe_calculators:BUILD",
     path = "/ovms/third_party/mediapipe_calculators",
 )
+
+# Drogon HTTP Server
+new_local_repository(
+    name = "linux_drogon",
+    build_file = "@//third_party/drogon:BUILD",
+    path="/usr"
+)
