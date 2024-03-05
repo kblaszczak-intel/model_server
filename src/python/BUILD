@@ -17,23 +17,7 @@
 load("@pybind11_bazel//:build_defs.bzl", "pybind_extension")
 load("@mediapipe//mediapipe/framework/port:build_config.bzl", "mediapipe_cc_proto_library", "mediapipe_proto_library")
 load("//:common_settings.bzl",
-     "COMMON_STATIC_LIBS_COPTS", "COMMON_STATIC_LIBS_LINKOPTS", "COMMON_FUZZER_COPTS", "COMMON_FUZZER_LINKOPTS", "COMMON_LOCAL_DEFINES", "PYBIND_DEPS")
-
-COPTS_ADJUSTED = COMMON_STATIC_LIBS_COPTS + select({
-        "//conditions:default": [],
-        "//:fuzzer_build" : COMMON_FUZZER_COPTS,
-}) + select({
-        "//conditions:default": ["-DPYTHON_DISABLE=1"],
-        "//:not_disable_python" : ["-DPYTHON_DISABLE=0"],
-}) + select({
-        "//conditions:default": ["-DMEDIAPIPE_DISABLE=1"],
-        "//:not_disable_mediapipe" : ["-DMEDIAPIPE_DISABLE=0"],
-})
-
-LINKOPTS_ADJUSTED = COMMON_STATIC_LIBS_LINKOPTS + select({
-    "//conditions:default": [],
-    "//:fuzzer_build" : COMMON_FUZZER_LINKOPTS,
-})
+     "COMMON_LOCAL_DEFINES", "create_config_settings", "ovms_copts", "ovms_linkopts", "ovms_test_copts", "PYBIND_DEPS")
 
 mediapipe_proto_library(
     name = "pythonexecutorcalculator_proto", # pythonexecutorcalculator_cc_proto - just mediapipe stuff with mediapipe_proto_library adding nonvisible target
@@ -63,8 +47,8 @@ cc_library(
         "//src:libovmslogging",
     ],
     visibility = ["//visibility:private"],
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
     alwayslink = 1,
     data = ["//src/python/binding:pyovms.so"],
 )
@@ -78,8 +62,8 @@ cc_library(
         "utils",
     ],
     visibility = ["//visibility:private"],
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
     alwayslink = 1,
     data = ["//src/python/binding:pyovms.so"],
 )
@@ -98,8 +82,8 @@ cc_library(
     ],
     visibility = ["//visibility:private"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
     alwayslink = 1,
     data = ["//src/python/binding:pyovms.so"],
 )
@@ -116,8 +100,8 @@ cc_library(
         "pythonbackend",
     ],
     visibility = ["//visibility:private"],
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
     alwayslink = 1,
     data = ["//src/python/binding:pyovms.so"],
 )
@@ -134,8 +118,8 @@ cc_library(
         "pythonnoderesources",
     ],
     visibility = ["//visibility:private"],
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
     alwayslink = 1,
     data = ["//src/python/binding:pyovms.so"],
 )
@@ -148,8 +132,8 @@ cc_library(
     include_prefix = "binding/python",
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
     alwayslink = 1,
     #data = [":pyovms.so"], #todo split to header?
 )
@@ -171,8 +155,8 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
     alwayslink = 1,
     data = ["//src/python/binding:pyovms.so"],
 )

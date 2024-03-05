@@ -60,18 +60,77 @@ def create_config_settings():
 ###############################
 # compilation settings
 ###############################
+def ovms_copts():
+    return COMMON_STATIC_LIBS_COPTS + select({
+        "//conditions:default": [],
+        "//:fuzzer_build" : COMMON_FUZZER_COPTS,
+    }) + select({
+        "//conditions:default": ["-DPYTHON_DISABLE=1"],
+        "//:not_disable_python" : ["-DPYTHON_DISABLE=0"],
+    }) + select({
+        "//conditions:default": ["-DMEDIAPIPE_DISABLE=1"],
+        "//:not_disable_mediapipe" : ["-DMEDIAPIPE_DISABLE=0"],
+    })
+
+def ovms_test_copts():
+    return [
+        "-Wall",
+        "-Wno-unknown-pragmas",
+        "-Werror",
+        "-Isrc",
+        "-fconcepts", # for gmock related utils
+        "-fvisibility=hidden",# Needed for pybind targets
+    ] + select({
+            "//conditions:default": ["-DPYTHON_DISABLE=1"],
+            "//:not_disable_python" : ["-DPYTHON_DISABLE=0"],
+    }) + select({
+            "//conditions:default": ["-DMEDIAPIPE_DISABLE=1"],
+            "//:not_disable_mediapipe" : ["-DMEDIAPIPE_DISABLE=0"],
+    })
+
+def ovms_linkopts():
+    return COMMON_STATIC_LIBS_LINKOPTS + select({
+        "//conditions:default": [],
+        "//:fuzzer_build" : COMMON_FUZZER_LINKOPTS,
+    })
+
 COMMON_STATIC_LIBS_COPTS = [
     "-Wall",
+#    "-Wextra", a lot of unuseful warnings anable later TODO
+    "-Werror", # TODO make this in release build only
+    # string formatting
+    "-Wformat",
+    "-Wformat-security",
+    "-Werror=format-security",
+    # other
     "-Wno-unknown-pragmas",
     "-Wno-sign-compare",
-    "-fvisibility=hidden", # Needed for pybind targets
-    "-Werror",
+    "-z noexecstack", # TODO release only
+    # PIC & PIE
+    "-fPIE",
+    "-fPIC",
+    "-fno-strict-overflow",
+    "-fno-delete-null-pointer-checks",
+    "-fwrapv",
+    "-fstack-protector",
+    "-fstack-clash-protection",
+    "-fvisibility=hidden", # Needed for pybind targets # TODO make it only in release
+    "-fcf-protection=full", #incompatible with minirect-branch
+    #"-D_FORTIFY_SOURCE=2", # bazel by default = 1 and we have error bc of redefinition TODO
+    # following are incompatible with fcf-protection=full
+    #"-mfunction-return=thunk",
+    #"-mindirect-branch=thunk",
+    #"-mindirect-branch-register",
+
 ]
 COMMON_STATIC_LIBS_LINKOPTS = [
-        "-lxml2",
-        "-luuid",
-        "-lstdc++fs",
-        "-lcrypto",
+    # Read-only relocation, Stack and Heap Overlap Protection
+    "-Wl,-z,relro,-z,now",
+    "-pie",
+    "-lxml2",
+    "-luuid",
+    "-lstdc++fs",
+    "-lcrypto",
 ]
 COMMON_FUZZER_COPTS = [
     "-fsanitize=address",
@@ -84,7 +143,7 @@ COMMON_FUZZER_LINKOPTS = [
     "-fsanitize-coverage=trace-pc",
     "-static-libasan",
 ]
-COMMON_LOCAL_DEFINES = ["SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE",]
+COMMON_LOCAL_DEFINES = ["SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE"]
 PYBIND_DEPS = [
     "@python3_linux//:python3-lib",
     "@pybind11//:pybind11_embed",

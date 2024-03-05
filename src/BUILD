@@ -16,38 +16,7 @@
 load("@bazel_skylib//lib:selects.bzl", "selects")
 load("@mediapipe//mediapipe/framework:more_selects.bzl", "more_selects")
 load("//:common_settings.bzl",
-     "COMMON_STATIC_LIBS_COPTS", "COMMON_STATIC_LIBS_LINKOPTS", "COMMON_FUZZER_COPTS", "COMMON_FUZZER_LINKOPTS", "COMMON_LOCAL_DEFINES",
-     "create_config_settings")
-COPTS_ADJUSTED = COMMON_STATIC_LIBS_COPTS + select({
-        "//conditions:default": [],
-        "//:fuzzer_build" : COMMON_FUZZER_COPTS,
-}) + select({
-        "//conditions:default": ["-DPYTHON_DISABLE=1"],
-        "//:not_disable_python" : ["-DPYTHON_DISABLE=0"],
-}) + select({
-        "//conditions:default": ["-DMEDIAPIPE_DISABLE=1"],
-        "//:not_disable_mediapipe" : ["-DMEDIAPIPE_DISABLE=0"],
-})
-
-LINKOPTS_ADJUSTED = COMMON_STATIC_LIBS_LINKOPTS + select({
-    "//conditions:default": [],
-    "//:fuzzer_build" : COMMON_FUZZER_LINKOPTS,
-})
-
-COPTS_TESTS = [
-    "-Wall",
-    "-Wno-unknown-pragmas",
-    "-Werror",
-    "-Isrc",
-    "-fconcepts", # for gmock related utils
-    "-fvisibility=hidden",# Needed for pybind targets
-] + select({
-        "//conditions:default": ["-DPYTHON_DISABLE=1"],
-        "//:not_disable_python" : ["-DPYTHON_DISABLE=0"],
-}) + select({
-        "//conditions:default": ["-DMEDIAPIPE_DISABLE=1"],
-        "//:not_disable_mediapipe" : ["-DMEDIAPIPE_DISABLE=0"],
-})
+     "COMMON_LOCAL_DEFINES", "create_config_settings", "ovms_copts", "ovms_linkopts", "ovms_test_copts")
 
 cc_library(
     name = "custom_nodes_common_lib",
@@ -58,6 +27,7 @@ cc_library(
         "custom_nodes/common/buffersqueue.hpp",
         "custom_nodes/common/buffersqueue.cpp",
     ],
+# TODO change opts
     copts = [
         "-Wall",
         "-Wno-unknown-pragmas",
@@ -136,6 +106,7 @@ cc_shared_library(
         })
     ,
     features = [],
+# TODO check opts
     roots = ["//src:ovms_lib"],
 )
 
@@ -155,9 +126,9 @@ mediapipe_proto_library(
 cc_library(
     name = "ovms_header",
     hdrs = ["ovms.h"],
-    copts = [],
+    copts = ovms_copts(),
     visibility = ["//visibility:public",],
-    linkopts = [],
+    linkopts = ovms_linkopts(),
     alwayslink = 1,
 )
 
@@ -387,8 +358,8 @@ cc_library(
         }),
     visibility = ["//visibility:public",],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
     data = select({
         "//:not_disable_python": [
             "//src/python/binding:pyovms.so",
@@ -415,8 +386,8 @@ cc_library(
     ],
     visibility = ["//visibility:public",],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
     alwayslink = 1,
 )
 
@@ -430,8 +401,8 @@ cc_library(
     ],
     visibility = ["//visibility:public",],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
     alwayslink = 1,
 )
 
@@ -442,8 +413,8 @@ cc_library(
     deps = ["@linux_openvino//:openvino",], # TODO dispose
     visibility = ["//visibility:public",],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
     alwayslink = 1,
 )
 
@@ -536,6 +507,7 @@ cc_binary(
         "@linux_opencv//:opencv"
     ],
     linkshared = 1,
+    # TODO opts
     copts = [
         "-Wall",
         "-Wno-unknown-pragmas",
@@ -555,6 +527,7 @@ cc_binary(
         "@linux_opencv//:opencv"
     ],
     linkshared = 1,
+    # TODO opts
     copts = [
         "-Wall",
         "-Wno-unknown-pragmas",
@@ -576,6 +549,7 @@ cc_binary(
         "custom_nodes/add_one/add_one_internal_manager.hpp"
     ],
     linkshared = 1,
+    # TODO opts
     copts = [
         "-Wall",
         "-Wno-unknown-pragmas",
@@ -600,6 +574,7 @@ cc_binary(
         "@linux_opencv//:opencv"
     ],
     linkshared = 1,
+    # TODO opts
     copts = [
         "-Wall",
         "-Wno-unknown-pragmas",
@@ -619,6 +594,7 @@ cc_binary(
         "@linux_opencv//:opencv"
     ],
     linkshared = 1,
+    # TODO opts
     copts = [
         "-Wall",
         "-Wno-unknown-pragmas",
@@ -638,6 +614,7 @@ cc_binary(
         "@linux_opencv//:opencv"
     ],
     linkshared = 1,
+    # TODO opts
     copts = [
         "-Wall",
         "-Wno-unknown-pragmas",
@@ -658,6 +635,7 @@ cc_binary(
         "-lstdc++fs",
         "-lcrypto",
     ],
+    # TODO opts
     copts = [
     ],
     deps = [
@@ -688,8 +666,8 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
 )
 
 cc_library( # TODO split dependencies
@@ -715,8 +693,8 @@ cc_library( # TODO split dependencies
     ],
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
 )
 
 cc_library(
@@ -730,8 +708,8 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
 )
 
 cc_library(
@@ -761,8 +739,8 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
 )
 
 cc_library(
@@ -772,8 +750,8 @@ cc_library(
     deps = [],
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
 )
 
 cc_library(
@@ -786,8 +764,8 @@ cc_library(
             "libovmslogging",],
     visibility = ["//visibility:public",],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
 )
 
 cc_library( # make ovms_lib dependent, use share doptions
@@ -797,8 +775,8 @@ cc_library( # make ovms_lib dependent, use share doptions
     deps = [],
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
 )
 
 cc_library(
@@ -809,8 +787,8 @@ cc_library(
     deps = [],
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
 )
 
 cc_library( # make ovms_lib dependent, use share doptions
@@ -832,8 +810,8 @@ cc_library( # make ovms_lib dependent, use share doptions
     ],
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
 )
 
 cc_library( # make ovms_lib dependent, use share doptions
@@ -852,8 +830,8 @@ cc_library( # make ovms_lib dependent, use share doptions
     ],
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
 )
 
 cc_library( # make ovms_lib dependent, use share doptions
@@ -878,8 +856,8 @@ cc_library( # make ovms_lib dependent, use share doptions
     ],
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
 )
 
 cc_library(
@@ -893,8 +871,8 @@ cc_library(
             "libovmsstatus",],
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
 )
 
 cc_library(
@@ -906,8 +884,8 @@ cc_library(
             "libovmslogging"],
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
 )
 
 cc_library(
@@ -923,8 +901,8 @@ cc_library(
             "libovmslogging"],
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
 )
 
 cc_library( # TODO split further
@@ -941,8 +919,8 @@ cc_library( # TODO split further
     deps = [],
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
+    copts = ovms_copts(),
+    linkopts = ovms_linkopts(),
 )
 
 cc_binary(
@@ -957,6 +935,7 @@ cc_binary(
         "-lstdc++fs",
         "-lcrypto",
     ],
+    # TODO opts
     copts = [
     ],
     deps = [
@@ -977,6 +956,7 @@ cc_binary(
         "-lcrypto",
         # "-lovms_shared",  # Use for dynamic linking when necessary
     ],
+    # TODO opts
     copts = [
         "-Wall",
         "-Wconversion",
@@ -1226,7 +1206,7 @@ cc_test(
             ],
             "//:disable_mediapipe" : [],
         }),
-    copts = COPTS_TESTS,
+    copts = ovms_test_copts(),
 )
 
 filegroup(

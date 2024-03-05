@@ -43,6 +43,9 @@ public:
     Status removeBuffer();
     OVMS_DataType getDataType() const;
     const signed_shape_t& getShape() const;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wignored-qualifiers"
     const Buffer* const getBuffer() const;
+#pragma GCC diagnostic pop
 };
 }  // namespace ovms

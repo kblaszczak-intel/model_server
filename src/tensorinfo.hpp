@@ -21,7 +21,10 @@
 #include <utility>
 #include <vector>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <openvino/openvino.hpp>
+#pragma GCC diagnostic pop
 
 #include "layout.hpp"
 #include "precision.hpp"
@@ -130,7 +133,7 @@ public:
          * 
          * @return const InferenceEngine::Precision
          */
-    const Precision getPrecision() const;
+    Precision getPrecision() const;
 
     ov::element::Type getOvPrecision() const;
 

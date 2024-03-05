@@ -20,7 +20,10 @@
 #include <unordered_map>
 #include <vector>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <openvino/openvino.hpp>
+#pragma GCC diagnostic pop
 
 namespace ovms {
 class Status;

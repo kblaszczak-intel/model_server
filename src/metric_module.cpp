@@ -25,7 +25,9 @@ MetricModule::~MetricModule() = default;
 MetricModule::MetricModule() :
     registry(std::make_unique<MetricRegistry>()) {}
 
-Status MetricModule::start(const Config& config) { return StatusCode::OK; }
+#define IGNORE_UNUSED_WARNING(A) (void)(A)
+Status MetricModule::start(__attribute__ ((unused)) const Config& config) {
+        return StatusCode::OK; }
 
 void MetricModule::shutdown() {}
 

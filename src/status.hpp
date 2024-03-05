@@ -388,7 +388,7 @@ public:
         return (code == StatusCode::OK || code == StatusCode::OK_RELOADED || code == StatusCode::OK_NOT_RELOADED);
     }
 
-    const StatusCode getCode() const {
+    StatusCode getCode() const {
         return this->code;
     }
 

@@ -117,7 +117,7 @@ const std::string& TensorInfo::getMappedName() const {
     return mapping.size() == 0 ? name : mapping;
 }
 
-const Precision TensorInfo::getPrecision() const {
+Precision TensorInfo::getPrecision() const {
     return precision;
 }
 
