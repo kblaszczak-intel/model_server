@@ -69,5 +69,8 @@ public:
     Status infer(const KFSRequest* request, KFSResponse* response, ExecutionContext executionContext, ServableMetricReporter*& reporterOut) const;
 
     Status inferStream(const ::inference::ModelInferRequest& firstRequest, ::grpc::ServerReaderWriterInterface<::inference::ModelStreamInferResponse, ::inference::ModelInferRequest>& stream);
+
+    template <typename RequestType, typename ResponseType>
+    Status inferEx(const RequestType& req, ResponseType& res);
 };
 }  // namespace ovms

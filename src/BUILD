@@ -339,6 +339,8 @@ cc_library(
             "//:not_disable_mediapipe": [
                 "mediapipe_internal/mediapipefactory.cpp",
                 "mediapipe_internal/mediapipefactory.hpp",
+                "mediapipe_internal/mediapipe_stream_impl.cpp",
+                "mediapipe_internal/mediapipe_stream_impl.hpp",
                 "mediapipe_internal/mediapipegraphconfig.hpp",
                 "mediapipe_internal/mediapipegraphconfig.cpp",
                 "mediapipe_internal/mediapipegraphdefinition.cpp",

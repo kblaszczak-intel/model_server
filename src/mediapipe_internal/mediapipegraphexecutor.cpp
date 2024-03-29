@@ -27,6 +27,7 @@
 #include <utility>
 #include <vector>
 
+#include "mediapipe_stream_impl.hpp"
 #include "../deserialization.hpp"
 #include "../execution_context.hpp"
 #include "../kfs_frontend/kfs_utils.hpp"
@@ -1095,4 +1096,149 @@ Status MediapipeGraphExecutor::serializePacket(const std::string& name, ::infere
     }
     return status;
 }
+
+static Status sendPacketImpl(
+    const   std::string&            endpointName,
+    const   std::string&            endpointVersion,
+    const   std::string&            packetName,
+    const   ::mediapipe::Packet&    packet,
+            KFSServerReaderWriter&  serverReaderWriter) {
+
+    KFSStreamResponse resp;
+
+    // OVMS_RETURN_ON_FAIL(
+    //     serializePacket(packetName, *resp.mutable_infer_response(), packet));
+
+    static const std::string TIMESTAMP_PARAMETER_NAME{"OVMS_MP_TIMESTAMP"};  // TODO
+    *resp.mutable_infer_response()->mutable_model_name() = endpointName;
+    *resp.mutable_infer_response()->mutable_model_version() = endpointVersion;
+    resp.mutable_infer_response()->mutable_parameters()->operator[](TIMESTAMP_PARAMETER_NAME).set_int64_param(packet.Timestamp().Value());
+
+    if (!serverReaderWriter.Write(resp)) {
+        return Status(StatusCode::UNKNOWN_ERROR, "client disconnected");
+    }
+
+    return StatusCode::OK;
+}
+
+template <typename RequestType, typename ResponseType>
+    Status MediapipeGraphExecutor::inferEx(const RequestType& req, ResponseType& res) {
+    SPDLOG_DEBUG("Start MediapipeGraphExecutor::inferEx mediapipe graph: {} execution", this->name);
+    std::mutex sendMutex;
+    try {
+        // Init
+        ::mediapipe::CalculatorGraph graph;
+        MP_RETURN_ON_FAIL(graph.Initialize(this->config), "graph initialization", StatusCode::MEDIAPIPE_GRAPH_INITIALIZATION_ERROR);
+
+        // Installing observers
+        for (const auto& outputName : this->outputNames) {
+            MP_RETURN_ON_FAIL(graph.ObserveOutputStream(outputName, [&res, &sendMutex, &outputName, this](const ::mediapipe::Packet& packet) -> absl::Status {
+                try {
+                    // Serialize
+                    // Send/Produce/Give
+
+                    // ::inference::ModelStreamInferResponse resp;
+                    // OVMS_RETURN_MP_ERROR_ON_FAIL(serializePacket(outputName, *resp.mutable_infer_response(), packet), "error in serialization");
+                    // *resp.mutable_infer_response()->mutable_model_name() = this->name;
+                    // *resp.mutable_infer_response()->mutable_model_version() = this->version;
+                    // resp.mutable_infer_response()->mutable_parameters()->operator[](MediapipeGraphExecutor::TIMESTAMP_PARAMETER_NAME).set_int64_param(packet.// Timestamp().Value());
+                    // if (!streamSynchronizedWrite(stream, streamWriterMutex, resp)) {
+                    //     return absl::Status(absl::StatusCode::kCancelled, "client disconnected");
+                    // }
+                    std::lock_guard<std::mutex> lock(sendMutex);
+                    OVMS_RETURN_MP_ERROR_ON_FAIL(sendPacketImpl(
+                        this->name, this->version, outputName, packet, res),
+                            "error in send packet routine");
+                    return absl::OkStatus();
+                } catch (...) {
+                    return absl::Status(absl::StatusCode::kCancelled, "error in serialization");
+                }
+            }),
+                "output stream observer installation", StatusCode::INTERNAL_ERROR);  // Should never happen for validated graphs
+        }
+
+        // Launch
+        std::map<std::string, mediapipe::Packet> inputSidePackets;
+        OVMS_RETURN_ON_FAIL(deserializeInputSidePacketsImpl(inputSidePackets, req));  // API
+#if (PYTHON_DISABLE == 0)
+
+        // TODO API?
+        // We have python side packet
+        // We will need more side packets: LLM Engine handle
+        inputSidePackets[PYTHON_SESSION_SIDE_PACKET_TAG] = mediapipe::MakePacket<PythonNodeResourcesMap>(this->pythonNodeResourcesMap)
+            .At(mediapipe::Timestamp(STARTING_TIMESTAMP));
+#endif
+        MP_RETURN_ON_FAIL(graph.StartRun(inputSidePackets), "graph start", StatusCode::MEDIAPIPE_GRAPH_START_ERROR);
+
+        // Deserialize first request
+        //OVMS_WRITE_ERROR_ON_FAIL_AND_CONTINUE(this->partialDeserialize(
+        //                                          std::shared_ptr<const KFSRequest>(&firstRequest,
+        //                                              // Custom deleter to avoid deallocation by custom holder
+        //                                              // Conversion to shared_ptr is required for unified deserialization method
+        //                                              // for first and subsequent requests
+        //                                              [](const KFSRequest*) {}),
+        //                                          graph),
+        //    "partial deserialization of first request");
+
+        // Validate first data
+        // Deserialize first data
+        // Recv/Consume/Take
+
+        // Read loop
+        // Here we create ModelInferRequest with shared ownership,
+        // and move it down to custom packet holder to ensure
+        // lifetime is extended to lifetime of deserialized Packets.
+        //auto req = std::make_shared<::inference::ModelInferRequest>();
+        //while (stream.Read(req.get())) {
+        //    auto pstatus = this->validateSubsequentRequest(*req);
+        //    if (pstatus.ok()) {
+        //        OVMS_WRITE_ERROR_ON_FAIL_AND_CONTINUE(this->partialDeserialize(req, graph), "partial deserialization of subsequent requests");
+        //    } else {
+        //        OVMS_WRITE_ERROR_ON_FAIL_AND_CONTINUE(pstatus, "validate subsequent requests");
+        //    }
+        //    if (graph.HasError()) {
+        //        SPDLOG_DEBUG("Graph {}: encountered an error, stopping the execution", this->name);
+        //        break;
+        //    }
+        //    req = std::make_shared<::inference::ModelInferRequest>();
+        //}
+        std::string name;
+        mediapipe::Packet packet;
+        // OVMS_WRITE_ERROR_ON_FAIL_AND_CONTINUE(
+        //     deserializePacketImpl(req, packet),
+        //     "partial deserialization of first request");
+        deserializePacketImpl(req, name, packet);
+
+        auto newReq = std::make_shared<RequestType>();
+        while (waitForNewRequest(res, *newReq)) {
+            name.clear();
+            // OVMS_WRITE_ERROR_ON_FAIL_AND_CONTINUE
+            deserializePacketImpl(*newReq, name, packet);
+            // Validate next data
+            // Deserialize next data
+            // Recv/Consume/Take
+
+            break;
+            newReq = std::make_shared<RequestType>();
+        }
+
+        SPDLOG_DEBUG("Graph {}: Closing packet sources...", this->name);
+        // Close input streams
+        MP_RETURN_ON_FAIL(graph.CloseAllPacketSources(), "closing all packet sources", StatusCode::MEDIAPIPE_GRAPH_CLOSE_INPUT_STREAM_ERROR);
+
+        SPDLOG_DEBUG("Graph {}: Closed all packet sources. Waiting untill done...", this->name);
+        MP_RETURN_ON_FAIL(graph.WaitUntilDone(), "waiting until done", StatusCode::MEDIAPIPE_EXECUTION_ERROR);
+        SPDLOG_DEBUG("Graph {}: Done execution", this->name);
+        return StatusCode::OK;
+    } catch (...) {
+        return Status(StatusCode::UNKNOWN_ERROR, "Exception while processing MediaPipe graph");  // To be displayed in method level above
+    }
+}
+
+template Status MediapipeGraphExecutor::inferEx<
+    KFSRequest,
+    KFSServerReaderWriter>(
+            const   KFSRequest&,
+                    KFSServerReaderWriter&);
+
 }  // namespace ovms
