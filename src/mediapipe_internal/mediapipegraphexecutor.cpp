@@ -1110,11 +1110,12 @@ template <typename RequestType, typename ResponseType>
         // Installing observers
         for (const auto& outputName : this->outputNames) {
             MP_RETURN_ON_FAIL(graph.ObserveOutputStream(outputName, [&res, &sendMutex, &outputName, this](const ::mediapipe::Packet& packet) -> absl::Status {
+                SPDLOG_ERROR("EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE");
                 try {
                     // API
                     std::lock_guard<std::mutex> lock(sendMutex);
                     OVMS_RETURN_MP_ERROR_ON_FAIL(sendPacketImpl(
-                        this->name, this->version, outputName, this->outputTypes.at(name), packet, res),
+                        this->name, this->version, outputName, this->outputTypes.at(outputName), packet, res),
                             "error in send packet routine");
                     return absl::OkStatus();
                 } catch (...) {

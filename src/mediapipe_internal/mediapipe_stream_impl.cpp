@@ -25,6 +25,8 @@
 #include "mediapipe/framework/port/status.h"
 #pragma GCC diagnostic pop
 
+
+#include "../predict_request_validation_utils.hpp"
 #include "../logging.hpp"
 
 #include "../kfs_frontend/kfs_utils.hpp"
@@ -56,6 +58,9 @@ namespace py = pybind11;
 
 namespace ovms {
 
+using namespace request_validation_utils;
+
+
 #define MP_RETURN_ON_FAIL(code, message, errorCode)              \
     {                                                            \
         auto absStatus = code;                                   \
@@ -65,6 +70,37 @@ namespace ovms {
             return Status(errorCode, std::move(absMessage));     \
         }                                                        \
     }
+
+#define OVMS_RETURN_ON_FAIL(code) \
+    {                             \
+        auto status = code;       \
+        if (!status.ok()) {       \
+            return status;        \
+        }                         \
+    }
+
+static mediapipe::Tensor::ElementType KFSPrecisionToMPPrecision(const KFSDataType& kfsDatatype) {
+    static std::unordered_map<KFSDataType, mediapipe::Tensor::ElementType> precisionMap{
+        //        {"FP64", mediapipe::Tensor::ElementType::},
+        {"FP32", mediapipe::Tensor::ElementType::kFloat32},
+        {"FP16", mediapipe::Tensor::ElementType::kFloat16},
+        //        {"INT64", mediapipe::Tensor::ElementType::},
+        {"INT32", mediapipe::Tensor::ElementType::kInt32},
+        //        {"INT16", mediapipe::Tensor::ElementType::},
+        {"INT8", mediapipe::Tensor::ElementType::kInt8},
+        //        {"UINT64", mediapipe::Tensor::ElementType::},
+        //        {"UINT32", mediapipe::Tensor::ElementType::},
+        //        {"UINT16", mediapipe::Tensor::ElementType::},
+        {"UINT8", mediapipe::Tensor::ElementType::kUInt8},
+        {"BOOL", mediapipe::Tensor::ElementType::kBool}
+        //        {"", ov::element::Type_t::, mediapipe::Tensor::ElementType::kChar}
+    };
+    auto it = precisionMap.find(kfsDatatype);
+    if (it == precisionMap.end()) {
+        return mediapipe::Tensor::ElementType::kNone;
+    }
+    return it->second;
+}
 
 /////// util ////////
 
@@ -275,6 +311,339 @@ Status receiveAndSerializePacket<PyObjectWrapper<py::object>>(const ::mediapipe:
 
 ////////////////////
 
+
+static Status getRequestInput(google::protobuf::internal::RepeatedPtrIterator<const inference::ModelInferRequest_InferInputTensor>& itr, const std::string& requestedName, const KFSRequest& request) {
+    auto requestInputItr = std::find_if(request.inputs().begin(), request.inputs().end(), [&requestedName](const ::KFSRequest::InferInputTensor& tensor) { return tensor.name() == requestedName; });
+    if (requestInputItr == request.inputs().end()) {
+        std::stringstream ss;
+        ss << "Required input: " << requestedName;
+        const std::string details = ss.str();
+        SPDLOG_DEBUG("[servable name: {} version: {}] Missing input with specific name - {}", request.model_name(), request.model_version(), details);
+        return Status(StatusCode::INVALID_MISSING_INPUT, details);
+    }
+    itr = requestInputItr;
+    return StatusCode::OK;
+}
+
+#define HANDLE_DESERIALIZATION_EXCEPTION(TYPE_STRING)                                                       \
+    catch (const std::exception& e) {                                                                       \
+        std::stringstream ss;                                                                               \
+        ss << "Exception:"                                                                                  \
+           << e.what()                                                                                      \
+           << "; caught during " TYPE_STRING " deserialization from KServe request tensor";                 \
+        std::string details = ss.str();                                                                     \
+        SPDLOG_DEBUG(details);                                                                              \
+        return Status(StatusCode::UNKNOWN_ERROR, std::move(details));                                       \
+    }                                                                                                       \
+    catch (...) {                                                                                           \
+        std::stringstream ss;                                                                               \
+        ss << "Unknown exception caught during " TYPE_STRING " deserialization from KServe request tensor"; \
+        std::string details = ss.str();                                                                     \
+        SPDLOG_DEBUG(details);                                                                              \
+        return Status(StatusCode::UNKNOWN_ERROR, std::move(details));                                       \
+    }
+
+static Status deserializeTensor(const std::string& requestedName, const KFSRequest& request, std::unique_ptr<mediapipe::Tensor>& outTensor, PythonBackend* pythonBackend) {
+    auto requestInputItr = request.inputs().begin();
+    OVMS_RETURN_ON_FAIL(getRequestInput(requestInputItr, requestedName, request));
+    auto inputIndex = requestInputItr - request.inputs().begin();
+    auto& bufferLocation = request.raw_input_contents().at(inputIndex);
+    try {
+        auto datatype = KFSPrecisionToMPPrecision(requestInputItr->datatype());
+        if (datatype == mediapipe::Tensor::ElementType::kNone) {
+            std::stringstream ss;
+            ss << "Not supported precision for Mediapipe tensor deserialization: " << requestInputItr->datatype();
+            const std::string details = ss.str();
+            SPDLOG_DEBUG(details);
+            return Status(StatusCode::INVALID_PRECISION, std::move(details));
+        }
+        std::vector<int> rawShape;
+        for (int i = 0; i < requestInputItr->shape().size(); i++) {
+            if (requestInputItr->shape()[i] <= 0) {
+                std::stringstream ss;
+                ss << "Negative or zero dimension size is not acceptable: " << tensorShapeToString(requestInputItr->shape()) << "; input name: " << requestedName;
+                const std::string details = ss.str();
+                SPDLOG_DEBUG("[servable name: {} version: {}] Invalid shape - {}", request.model_name(), request.model_version(), details);
+                return Status(StatusCode::INVALID_SHAPE, details);
+            }
+            rawShape.emplace_back(requestInputItr->shape()[i]);
+        }
+        mediapipe::Tensor::Shape tensorShape{rawShape};
+        outTensor = std::make_unique<mediapipe::Tensor>(datatype, tensorShape);
+        void* data;
+        SET_DATA_FROM_MP_TENSOR(outTensor, GetCpuWriteView);
+        std::memcpy(data, bufferLocation.data(), bufferLocation.size());
+    }
+    HANDLE_DESERIALIZATION_EXCEPTION("Mediapipe tensor")
+    return StatusCode::OK;
+}
+
+static Status deserializeTensor(const std::string& requestedName, const KFSRequest& request, std::unique_ptr<tensorflow::Tensor>& outTensor, PythonBackend* pythonBackend) {
+    using tensorflow::Tensor;
+    using tensorflow::TensorShape;
+    auto requestInputItr = request.inputs().begin();
+    OVMS_RETURN_ON_FAIL(getRequestInput(requestInputItr, requestedName, request));
+    auto inputIndex = requestInputItr - request.inputs().begin();
+    auto& bufferLocation = request.raw_input_contents().at(inputIndex);
+    try {
+        auto datatype = getPrecisionAsDataType(KFSPrecisionToOvmsPrecision(requestInputItr->datatype()));
+        if (datatype == TFSDataType::DT_INVALID) {
+            std::stringstream ss;
+            ss << "Not supported precision for Tensorflow tensor deserialization: " << requestInputItr->datatype();
+            const std::string details = ss.str();
+            SPDLOG_DEBUG(details);
+            return Status(StatusCode::INVALID_PRECISION, std::move(details));
+        }
+        TensorShape tensorShape;
+        std::vector<int64_t> rawShape;
+        for (int i = 0; i < requestInputItr->shape().size(); i++) {
+            if (requestInputItr->shape()[i] < 0) {
+                std::stringstream ss;
+                ss << "Negative dimension size is not acceptable: " << tensorShapeToString(requestInputItr->shape()) << "; input name: " << requestedName;
+                const std::string details = ss.str();
+                SPDLOG_DEBUG("[servable name: {} version: {}] Invalid shape - {}", request.model_name(), request.model_version(), details);
+                return Status(StatusCode::INVALID_SHAPE, details);
+            }
+            rawShape.emplace_back(requestInputItr->shape()[i]);
+        }
+        int64_t dimsCount = rawShape.size();
+        auto abslStatus = tensorflow::TensorShapeUtils::MakeShape(rawShape.data(), dimsCount, &tensorShape);
+        if (!abslStatus.ok()) {
+            auto stringViewAbslMessage = abslStatus.message();
+            return Status(StatusCode::UNKNOWN_ERROR, std::string{stringViewAbslMessage});
+        }
+        abslStatus = TensorShape::BuildTensorShapeBase(rawShape, static_cast<tensorflow::TensorShapeBase<TensorShape>*>(&tensorShape));
+        if (!abslStatus.ok()) {
+            auto stringViewAbslMessage = abslStatus.message();
+            return Status(StatusCode::UNKNOWN_ERROR, std::string{stringViewAbslMessage});
+        }
+        outTensor = std::make_unique<tensorflow::Tensor>(datatype, tensorShape);
+        if (outTensor->TotalBytes() != bufferLocation.size()) {
+            std::stringstream ss;
+            ss << "Mediapipe deserialization content size mismatch; allocated TF Tensor: " << outTensor->TotalBytes() << " bytes vs KServe buffer: " << bufferLocation.size() << " bytes";
+            const std::string details = ss.str();
+            SPDLOG_DEBUG("[servable name: {} version: {}] {}", request.model_name(), request.model_version(), details);
+            return Status(StatusCode::INVALID_CONTENT_SIZE, details);
+        }
+        void* tftensordata = outTensor->data();
+        std::memcpy(tftensordata, bufferLocation.data(), bufferLocation.size());
+    }
+    HANDLE_DESERIALIZATION_EXCEPTION("Tensorflow tensor")
+    return StatusCode::OK;
+}
+
+static Status deserializeTensor(const std::string& requestedName, const KFSRequest& request, std::unique_ptr<ov::Tensor>& outTensor, PythonBackend* pythonBackend) {
+    auto requestInputItr = request.inputs().begin();
+    OVMS_RETURN_ON_FAIL(getRequestInput(requestInputItr, requestedName, request));
+    auto inputIndex = requestInputItr - request.inputs().begin();
+    auto& bufferLocation = request.raw_input_contents().at(inputIndex);
+    try {
+        ov::Shape shape;
+        for (int i = 0; i < requestInputItr->shape().size(); i++) {
+            if (requestInputItr->shape()[i] < 0) {
+                std::stringstream ss;
+                ss << "Negative dimension size is not acceptable: " << tensorShapeToString(requestInputItr->shape()) << "; input name: " << requestedName;
+                const std::string details = ss.str();
+                SPDLOG_DEBUG("[servable name: {} version: {}] Invalid shape - {}", request.model_name(), request.model_version(), details);
+                return Status(StatusCode::INVALID_SHAPE, details);
+            }
+            shape.push_back(requestInputItr->shape()[i]);
+        }
+        ov::element::Type precision = ovmsPrecisionToIE2Precision(KFSPrecisionToOvmsPrecision(requestInputItr->datatype()));
+        size_t expectElementsCount = ov::shape_size(shape.begin(), shape.end());
+        size_t expectedBytes = precision.size() * expectElementsCount;
+
+        if (expectedBytes != bufferLocation.size()) {
+            std::stringstream ss;
+            ss << "Expected: " << expectedBytes << " bytes; Actual: " << bufferLocation.size() << " bytes; input name: " << requestedName;
+            const std::string details = ss.str();
+            SPDLOG_DEBUG("[servable name: {} version: {}] Invalid content size of tensor proto - {}", request.model_name(), request.model_version(), details);
+            return Status(StatusCode::INVALID_CONTENT_SIZE, details);
+        }
+        if (expectedBytes == 0) {
+            outTensor = std::make_unique<ov::Tensor>(precision, shape);  // OpenVINO does not accept nullptr as data ptr
+        } else {
+            outTensor = std::make_unique<ov::Tensor>(precision, shape, const_cast<void*>((const void*)bufferLocation.data()));
+        }
+    }
+    HANDLE_DESERIALIZATION_EXCEPTION("OpenVINO tensor")
+    return StatusCode::OK;
+}
+
+static mediapipe::ImageFormat::Format KFSDatatypeToImageFormat(const std::string& datatype, const size_t numberOfChannels) {
+    if (datatype == "FP32") {
+        if (numberOfChannels == 1) {
+            return mediapipe::ImageFormat::VEC32F1;
+        }
+        if (numberOfChannels == 2) {
+            return mediapipe::ImageFormat::VEC32F2;
+        }
+        if (numberOfChannels == 4) {
+            return mediapipe::ImageFormat::VEC32F4;
+        }
+    }
+    if (datatype == "UINT8" || datatype == "INT8") {
+        if (numberOfChannels == 1) {
+            return mediapipe::ImageFormat::GRAY8;
+        }
+        if (numberOfChannels == 3) {
+            return mediapipe::ImageFormat::SRGB;
+        }
+        if (numberOfChannels == 4) {
+            return mediapipe::ImageFormat::SRGBA;
+        }
+    }
+    if (datatype == "UINT16" || datatype == "INT16") {
+        if (numberOfChannels == 1) {
+            return mediapipe::ImageFormat::GRAY16;
+        }
+        if (numberOfChannels == 3) {
+            return mediapipe::ImageFormat::SRGB48;
+        }
+        if (numberOfChannels == 4) {
+            return mediapipe::ImageFormat::SRGBA64;
+        }
+    }
+    if (datatype == "FP16") {
+        if (numberOfChannels == 1) {
+            return mediapipe::ImageFormat::GRAY16;
+        }
+        if (numberOfChannels == 3) {
+            return mediapipe::ImageFormat::SRGB48;
+        }
+        if (numberOfChannels == 4) {
+            return mediapipe::ImageFormat::SRGBA64;
+        }
+    }
+    return mediapipe::ImageFormat::UNKNOWN;
+}
+
+static Status deserializeTensor(const std::string& requestedName, const KFSRequest& request, std::unique_ptr<mediapipe::ImageFrame>& outTensor, PythonBackend* pythonBackend) {
+    auto requestInputItr = request.inputs().begin();
+    OVMS_RETURN_ON_FAIL(getRequestInput(requestInputItr, requestedName, request));
+    auto inputIndex = requestInputItr - request.inputs().begin();
+    auto& bufferLocation = request.raw_input_contents().at(inputIndex);
+
+    if (requestInputItr->shape().size() != 3) {
+        std::stringstream ss;
+        ss << "Invalid Mediapipe Image input shape size. Expected: 3; Actual: " << requestInputItr->shape().size();
+        const std::string details = ss.str();
+        SPDLOG_DEBUG(details);
+        return Status(StatusCode::INVALID_SHAPE, details);
+    }
+    int64_t numberOfRows = requestInputItr->shape()[0];
+    if (numberOfRows <= 0) {
+        std::stringstream ss;
+        ss << "Invalid Mediapipe Image input height. Expected greater than 0; Actual: " << numberOfRows << "; Expected layout - HWC.";
+        const std::string details = ss.str();
+        SPDLOG_DEBUG(details);
+        return Status(StatusCode::INVALID_SHAPE, details);
+    }
+    int64_t numberOfCols = requestInputItr->shape()[1];
+    if (numberOfCols <= 0) {
+        std::stringstream ss;
+        ss << "Invalid Mediapipe Image input width. Expected greater than 0; Actual: " << numberOfCols << "; Expected layout - HWC.";
+        const std::string details = ss.str();
+        SPDLOG_DEBUG(details);
+        return Status(StatusCode::INVALID_SHAPE, details);
+    }
+    int64_t numberOfChannels = requestInputItr->shape()[2];
+    if (numberOfChannels <= 0) {
+        std::stringstream ss;
+        ss << "Invalid Mediapipe Image input number of channels. Expected greater than 0; Actual: " << numberOfChannels << "; Expected layout - HWC.";
+        const std::string details = ss.str();
+        SPDLOG_DEBUG(details);
+        return Status(StatusCode::INVALID_SHAPE, details);
+    }
+    size_t elementSize = KFSDataTypeSize(requestInputItr->datatype());
+    size_t expectedSize = numberOfChannels * numberOfCols * numberOfRows * elementSize;
+    if (bufferLocation.size() != expectedSize) {
+        std::stringstream ss;
+        ss << "Invalid Mediapipe Image input buffer size. Actual: " << bufferLocation.size() << "; Expected: " << expectedSize;
+        const std::string details = ss.str();
+        SPDLOG_DEBUG(details);
+        return Status(StatusCode::INVALID_CONTENT_SIZE, details);
+    }
+    auto imageFormat = KFSDatatypeToImageFormat(requestInputItr->datatype(), numberOfChannels);
+    if (imageFormat == mediapipe::ImageFormat::UNKNOWN) {
+        SPDLOG_DEBUG("Invalid KFS request datatype, conversion to Mediapipe ImageFrame format failed.");
+        return Status(StatusCode::INVALID_INPUT_FORMAT, "Invalid KFS request datatype, conversion to Mediapipe ImageFrame format failed.");
+    }
+    try {
+        outTensor = std::make_unique<mediapipe::ImageFrame>(
+            imageFormat,
+            numberOfCols,
+            numberOfRows,
+            numberOfCols * numberOfChannels * elementSize,
+            reinterpret_cast<uint8_t*>((const_cast<char*>(bufferLocation.data()))),
+            mediapipe::ImageFrame::PixelDataDeleter::kNone);
+    }
+    HANDLE_DESERIALIZATION_EXCEPTION("Mediapipe ImageFrame")
+    return StatusCode::OK;
+}
+
+#if (PYTHON_DISABLE == 0)
+static Status deserializeTensor(const std::string& requestedName, const KFSRequest& request, std::unique_ptr<PyObjectWrapper<py::object>>& outTensor, PythonBackend* pythonBackend) {
+    auto requestInputItr = request.inputs().begin();
+    auto status = getRequestInput(requestInputItr, requestedName, request);
+    if (!status.ok()) {
+        return status;
+    }
+    auto inputIndex = requestInputItr - request.inputs().begin();
+    auto& bufferLocation = request.raw_input_contents().at(inputIndex);
+    try {
+        std::vector<py::ssize_t> shape;
+        for (int i = 0; i < requestInputItr->shape().size(); i++) {
+            if (requestInputItr->shape()[i] < 0) {
+                std::stringstream ss;
+                ss << "Negative dimension size is not acceptable: " << tensorShapeToString(requestInputItr->shape()) << "; input name: " << requestedName;
+                const std::string details = ss.str();
+                SPDLOG_DEBUG("[servable name: {} version: {}] Invalid shape - {}", request.model_name(), request.model_version(), details);
+                return Status(StatusCode::INVALID_SHAPE, details);
+            }
+            shape.push_back(requestInputItr->shape()[i]);
+        }
+
+        auto formatIt = datatypeToBufferFormat.find(requestInputItr->datatype());
+        if (formatIt != datatypeToBufferFormat.end()) {
+            // If datatype is known, we check if a valid buffer can be created with provided data
+            size_t itemsize = bufferFormatToItemsize.at(formatIt->second);
+            size_t expectedBufferSize = 1;
+
+            bool expectedBufferSizeValid = computeExpectedBufferSizeReturnFalseIfOverflow<py::ssize_t>(shape, itemsize, expectedBufferSize);
+            if (!expectedBufferSizeValid) {
+                const std::string details = "Provided shape and datatype declare too large buffer.";
+                SPDLOG_DEBUG("[servable name: {} version: {}] {}", request.model_name(), request.model_version(), details);
+                return Status(StatusCode::INVALID_CONTENT_SIZE, details);
+            }
+
+            if (bufferLocation.size() != expectedBufferSize) {
+                std::stringstream ss;
+                ss << "Invalid Python tensor buffer size. Actual: " << bufferLocation.size() << "; Expected: " << expectedBufferSize;
+                const std::string details = ss.str();
+                SPDLOG_DEBUG("[servable name: {} version: {}] {}", request.model_name(), request.model_version(), details);
+                return Status(StatusCode::INVALID_CONTENT_SIZE, details);
+            }
+        }
+
+        auto ok = pythonBackend->createOvmsPyTensor(
+            requestedName,
+            const_cast<void*>((const void*)bufferLocation.data()),
+            shape,
+            requestInputItr->datatype(),
+            bufferLocation.size(),
+            outTensor);
+
+        if (!ok) {
+            SPDLOG_DEBUG("Error creating Python tensor from data");
+            return StatusCode::UNKNOWN_ERROR;
+        }
+    }
+    HANDLE_DESERIALIZATION_EXCEPTION("Ovms Python tensor")
+    return StatusCode::OK;
+}
+#endif
+
 template <typename T, template <typename X> typename Holder>
 static Status createPacketAndPushIntoGraph(const std::string& name, std::shared_ptr<const KFSRequest>& request, ::mediapipe::CalculatorGraph& graph, const ::mediapipe::Timestamp& timestamp, PythonBackend* pythonBackend) {
     if (name.empty()) {
@@ -295,7 +664,7 @@ static Status createPacketAndPushIntoGraph(const std::string& name, std::shared_
         return Status(StatusCode::INVALID_MESSAGE_STRUCTURE, details);
     }
     std::unique_ptr<T> inputTensor;
-    //OVMS_RETURN_ON_FAIL(deserializeTensor(name, *request, inputTensor, pythonBackend));
+    OVMS_RETURN_ON_FAIL(deserializeTensor(name, *request, inputTensor, pythonBackend));
     MP_RETURN_ON_FAIL(graph.AddPacketToInputStream(
                           name,
                           ::mediapipe::packet_internal::Create(
@@ -530,6 +899,7 @@ Status recvPacketImpl(
         const auto& inputName = input.name();
         auto status = createPacketAndPushIntoGraph<HolderWithRequestOwnership>(
             inputName, request, graph, currentTimestamp, inputTypes, pythonBackend);
+        SPDLOG_INFO("BBBBBBBBBBBBBB {}", currentTimestamp.DebugString());
         if (!status.ok()) {
             return status;
         }
