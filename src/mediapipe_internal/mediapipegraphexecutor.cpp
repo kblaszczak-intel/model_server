@@ -1097,34 +1097,34 @@ Status MediapipeGraphExecutor::serializePacket(const std::string& name, ::infere
     return status;
 }
 
-static Status sendPacketImpl(
-    const   std::string&            endpointName,
-    const   std::string&            endpointVersion,
-    const   std::string&            packetName,
-    const   ::mediapipe::Packet&    packet,
-            KFSServerReaderWriter&  serverReaderWriter) {
+// static Status sendPacketImpl(
+//     const   std::string&            endpointName,
+//     const   std::string&            endpointVersion,
+//     const   std::string&            packetName,
+//     const   ::mediapipe::Packet&    packet,
+//             KFSServerReaderWriter&  serverReaderWriter) {
 
-    KFSStreamResponse resp;
+//     KFSStreamResponse resp;
 
-    // OVMS_RETURN_ON_FAIL(
-    //     serializePacket(packetName, *resp.mutable_infer_response(), packet));
+//     // OVMS_RETURN_ON_FAIL(
+//     //     serializePacket(packetName, *resp.mutable_infer_response(), packet));
 
-    static const std::string TIMESTAMP_PARAMETER_NAME{"OVMS_MP_TIMESTAMP"};  // TODO
-    *resp.mutable_infer_response()->mutable_model_name() = endpointName;
-    *resp.mutable_infer_response()->mutable_model_version() = endpointVersion;
-    resp.mutable_infer_response()->mutable_parameters()->operator[](TIMESTAMP_PARAMETER_NAME).set_int64_param(packet.Timestamp().Value());
+//     static const std::string TIMESTAMP_PARAMETER_NAME{"OVMS_MP_TIMESTAMP"};  // TODO
+//     *resp.mutable_infer_response()->mutable_model_name() = endpointName;
+//     *resp.mutable_infer_response()->mutable_model_version() = endpointVersion;
+//     resp.mutable_infer_response()->mutable_parameters()->operator[](TIMESTAMP_PARAMETER_NAME).set_int64_param(packet.Timestamp().Value());
 
-    if (!serverReaderWriter.Write(resp)) {
-        return Status(StatusCode::UNKNOWN_ERROR, "client disconnected");
-    }
+//     if (!serverReaderWriter.Write(resp)) {
+//         return Status(StatusCode::UNKNOWN_ERROR, "client disconnected");
+//     }
 
-    return StatusCode::OK;
-}
+//     return StatusCode::OK;
+// }
 
 template <typename RequestType, typename ResponseType>
     Status MediapipeGraphExecutor::inferEx(const RequestType& req, ResponseType& res) {
     SPDLOG_DEBUG("Start MediapipeGraphExecutor::inferEx mediapipe graph: {} execution", this->name);
-    std::mutex sendMutex;
+    std::mutex sendMutex;  // TODO: Should synchronization be at API implementation level or executor?
     try {
         // Init
         ::mediapipe::CalculatorGraph graph;
@@ -1147,7 +1147,7 @@ template <typename RequestType, typename ResponseType>
                     // }
                     std::lock_guard<std::mutex> lock(sendMutex);
                     OVMS_RETURN_MP_ERROR_ON_FAIL(sendPacketImpl(
-                        this->name, this->version, outputName, packet, res),
+                        this->name, this->version, outputName, this->outputTypes.at(name), packet, res),
                             "error in send packet routine");
                     return absl::OkStatus();
                 } catch (...) {

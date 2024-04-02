@@ -21,6 +21,7 @@
 
 #include "../status.hpp"
 #include "../kfs_frontend/kfs_grpc_inference_service.hpp"
+#include "packettypes.hpp"
 
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic push
@@ -37,22 +38,24 @@ Status deserializeInputSidePacketsImpl(
 
 // Imitation of stream.Read(...)
 bool waitForNewRequest(
-    KFSServerReaderWriter& serverReaderWriter,
-    KFSRequest& newRequest);
+    KFSServerReaderWriter&  serverReaderWriter,
+    KFSRequest&             newRequest);
 
 // Supports only 1 output, each output is sent separately
 // Maybe be called from different threads, requires synchronization.
-// Status sendPacketImpl(
-//     const   std::string&            endpointName,
-//     const   std::string&            endpointVersion,
-//     const   std::string&            name,
-//     const   ::mediapipe::Packet&    packet,
-//             KFSServerReaderWriter&  serverReaderWriter);
+Status sendPacketImpl(
+    const   std::string&                endpointName,
+    const   std::string&                endpointVersion,
+    const   std::string&                packetName,
+    const   mediapipe_packet_type_enum  packetType,
+    const   ::mediapipe::Packet&        packet,
+            KFSServerReaderWriter&      serverReaderWriter);
 
 // TODO: Needs to support multiple inputs, we support multiple inputs at once
 Status deserializePacketImpl(
     const   KFSRequest&         request,
             std::string&        name,
             mediapipe::Packet&  packet);
+            // callback to fire when packet is created? TODO
 
 }  // namespace ovms
