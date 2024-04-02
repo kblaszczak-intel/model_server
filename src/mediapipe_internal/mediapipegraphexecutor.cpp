@@ -1149,7 +1149,7 @@ template <typename RequestType, typename ResponseType>
 
         // API
         std::map<std::string, mediapipe::Packet> inputSidePackets;
-        OVMS_RETURN_ON_FAIL(deserializeInputSidePacketsImpl(inputSidePackets, req));  // API
+        OVMS_RETURN_ON_FAIL(deserializeInputSidePacketsFromFirstRequestImpl(inputSidePackets, req));  // API
 #if (PYTHON_DISABLE == 0)
 
         // TODO API?
@@ -1161,80 +1161,27 @@ template <typename RequestType, typename ResponseType>
         MP_RETURN_ON_FAIL(graph.StartRun(inputSidePackets), "graph start", StatusCode::MEDIAPIPE_GRAPH_START_ERROR);
 
         // Deserialize first request
-        //OVMS_WRITE_ERROR_ON_FAIL_AND_CONTINUE(this->partialDeserialize(
-        //                                          std::shared_ptr<const KFSRequest>(&firstRequest,
-        //                                              // Custom deleter to avoid deallocation by custom holder
-        //                                              // Conversion to shared_ptr is required for unified deserialization method
-        //                                              // for first and subsequent requests
-        //                                              [](const KFSRequest*) {}),
-        //                                          graph),
-        //    "partial deserialization of first request");
-
-        // Validate first data
-        // Deserialize first data
-        // Recv/Consume/Take
-
-        // Read loop
-        // Here we create ModelInferRequest with shared ownership,
-        // and move it down to custom packet holder to ensure
-        // lifetime is extended to lifetime of deserialized Packets.
-        //auto req = std::make_shared<::inference::ModelInferRequest>();
-        //while (stream.Read(req.get())) {
-        //    auto pstatus = this->validateSubsequentRequest(*req);
-        //    if (pstatus.ok()) {
-        //        OVMS_WRITE_ERROR_ON_FAIL_AND_CONTINUE(this->partialDeserialize(req, graph), "partial deserialization of subsequent requests");
-        //    } else {
-        //        OVMS_WRITE_ERROR_ON_FAIL_AND_CONTINUE(pstatus, "validate subsequent requests");
-        //    }
-        //    if (graph.HasError()) {
-        //        SPDLOG_DEBUG("Graph {}: encountered an error, stopping the execution", this->name);
-        //        break;
-        //    }
-        //    req = std::make_shared<::inference::ModelInferRequest>();
-        //}
-        // std::string name;
-        // mediapipe::Packet packet;
-        // OVMS_WRITE_ERROR_ON_FAIL_AND_CONTINUE(
-        //     deserializePacketImpl(req, packet),
-        //     "partial deserialization of first request");
-        //deserializePacketImpl(req, name, packet);
-        auto consumeFn = [this, &graph](
-            const mediapipe::Packet&    packet,
-            const std::string&          packetName) -> Status {
-    
-            if (std::find_if(
-                this->inputNames.begin(),
-                this->inputNames.end(),
-                [&packetName](auto streamName) {
-                    return streamName == packetName;
-                }) == this->inputNames.end()) {
-                SPDLOG_DEBUG("Request for {}, contains not expected input name: {}", this->name, packetName);
-                return Status(StatusCode::INVALID_UNEXPECTED_INPUT, std::string(packetName) + " is unexpected");
-            }
-
-            // TODO: Different types of holders
-            MP_RETURN_ON_FAIL(graph.AddPacketToInputStream(packetName, packet),
-                std::string("failed to add packet to stream: ") + packetName, StatusCode::MEDIAPIPE_GRAPH_ADD_PACKET_INPUT_STREAM);
-            return StatusCode::OK;
-        };
-        deserializePacketImpl(std::shared_ptr<const KFSRequest>(&req,
+        // API
+        recvPacketImpl(std::shared_ptr<const KFSRequest>(&req,
                                                       // Custom deleter to avoid deallocation by custom holder
                                                       // Conversion to shared_ptr is required for unified deserialization method
                                                       // for first and subsequent requests
                                                       [](const KFSRequest*) {}),
-                              consumeFn);
+                              this->inputTypes,
+                              this->pythonBackend,
+                              graph);
 
         auto newReq = std::make_shared<RequestType>();
         while (waitForNewRequest(res, *newReq)) {
-            deserializePacketImpl(newReq, consumeFn);
-            //name.clear();
-            // OVMS_WRITE_ERROR_ON_FAIL_AND_CONTINUE
-            //deserializePacketImpl(*newReq, name, packet);
-            // Validate next data
-            // Deserialize next data
-            // Recv/Consume/Take
+            // TODO: Validate?
+            // Deserialize subsequent request
+            // API
+            recvPacketImpl(
+                newReq,
+                this->inputTypes,
+                this->pythonBackend,
+                graph);
 
-            break;
             newReq = std::make_shared<RequestType>();
         }
 

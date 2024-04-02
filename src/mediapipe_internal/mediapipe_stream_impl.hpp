@@ -29,11 +29,16 @@
 #pragma GCC diagnostic ignored "-Wall"
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #include "mediapipe/framework/packet.h"
+#include "mediapipe/framework/calculator_graph.h"
 #pragma GCC diagnostic pop
+
+#if (PYTHON_DISABLE == 0)
+#include "../python/python_backend.hpp"
+#endif
 
 namespace ovms {
 
-Status deserializeInputSidePacketsImpl(
+Status deserializeInputSidePacketsFromFirstRequestImpl(
             std::map<std::string, mediapipe::Packet>&   inputSidePackets,
     const   KFSRequest&                                 request);
 
@@ -44,6 +49,7 @@ bool waitForNewRequest(
 
 // Supports only 1 output, each output is sent separately
 // Maybe be called from different threads, requires synchronization.
+// For now the synchronization is automatic, in graph executor
 Status sendPacketImpl(
     const   std::string&                endpointName,
     const   std::string&                endpointVersion,
@@ -52,12 +58,11 @@ Status sendPacketImpl(
     const   ::mediapipe::Packet&        packet,
             KFSServerReaderWriter&      serverReaderWriter);
 
-// TODO: Needs to support multiple inputs, we support multiple inputs at once
-Status deserializePacketImpl(
+// Deserialization and pushing into the graph
+Status recvPacketImpl(
     std::shared_ptr<const KFSRequest>               request,
-    std::function<Status(
-        const   mediapipe::Packet&,
-        const   std::string&)>&&                    fn);
-            // callback to fire when packet is created? TODO
+    stream_types_mapping_t&                         inputTypes,
+    PythonBackend*                                  pythonBackend,
+    ::mediapipe::CalculatorGraph&                   graph);
 
 }  // namespace ovms

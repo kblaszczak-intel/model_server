@@ -59,6 +59,8 @@ protected:
     Status serializePacket(const std::string& name, ::inference::ModelInferResponse& response, const ::mediapipe::Packet& packet) const;
 
 public:
+    PythonBackend* getPythonBackend() { return pythonBackend; }
+
     static const std::string TIMESTAMP_PARAMETER_NAME;
     MediapipeGraphExecutor(const std::string& name, const std::string& version, const ::mediapipe::CalculatorGraphConfig& config,
         stream_types_mapping_t inputTypes,

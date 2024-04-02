@@ -56,6 +56,16 @@ namespace py = pybind11;
 
 namespace ovms {
 
+#define MP_RETURN_ON_FAIL(code, message, errorCode)              \
+    {                                                            \
+        auto absStatus = code;                                   \
+        if (!absStatus.ok()) {                                   \
+            const std::string absMessage = absStatus.ToString(); \
+            SPDLOG_DEBUG("{} {}", message, absMessage);          \
+            return Status(errorCode, std::move(absMessage));     \
+        }                                                        \
+    }
+
 /////// util ////////
 
 #define SET_DATA_FROM_MP_TENSOR(TENSOR, VIEW_TYPE)                                                     \
@@ -265,7 +275,129 @@ Status receiveAndSerializePacket<PyObjectWrapper<py::object>>(const ::mediapipe:
 
 ////////////////////
 
-Status deserializeInputSidePacketsImpl(
+template <typename T, template <typename X> typename Holder>
+static Status createPacketAndPushIntoGraph(const std::string& name, std::shared_ptr<const KFSRequest>& request, ::mediapipe::CalculatorGraph& graph, const ::mediapipe::Timestamp& timestamp, PythonBackend* pythonBackend) {
+    if (name.empty()) {
+        SPDLOG_DEBUG("Creating Mediapipe graph inputs name failed for: {}", name);
+        return StatusCode::MEDIAPIPE_GRAPH_ADD_PACKET_INPUT_STREAM;
+    }
+    SPDLOG_DEBUG("Tensor to deserialize:\"{}\"", name);
+    if (request->raw_input_contents().size() == 0) {
+        const std::string details = "Invalid message structure - raw_input_content is empty";
+        SPDLOG_DEBUG("[servable name: {} version: {}] {}", request->model_name(), request->model_version(), details);
+        return Status(StatusCode::INVALID_MESSAGE_STRUCTURE, details);
+    }
+    if (request->raw_input_contents().size() != request->inputs().size()) {
+        std::stringstream ss;
+        ss << "Size of raw_input_contents: " << request->raw_input_contents().size() << " is different than number of inputs: " << request->inputs().size();
+        const std::string details = ss.str();
+        SPDLOG_DEBUG("[servable name: {} version: {}] Invalid message structure - {}", request->model_name(), request->model_version(), details);
+        return Status(StatusCode::INVALID_MESSAGE_STRUCTURE, details);
+    }
+    std::unique_ptr<T> inputTensor;
+    //OVMS_RETURN_ON_FAIL(deserializeTensor(name, *request, inputTensor, pythonBackend));
+    MP_RETURN_ON_FAIL(graph.AddPacketToInputStream(
+                          name,
+                          ::mediapipe::packet_internal::Create(
+                              new Holder<T>(inputTensor.release(), request))
+                              .At(timestamp)),
+        std::string("failed to add packet to stream: ") + name, StatusCode::MEDIAPIPE_GRAPH_ADD_PACKET_INPUT_STREAM);
+    return StatusCode::OK;
+}
+
+template <template <typename X> typename Holder>
+static Status createPacketAndPushIntoGraph(const std::string& name, std::shared_ptr<const KFSRequest>& request, ::mediapipe::CalculatorGraph& graph, const ::mediapipe::Timestamp& timestamp, PythonBackend* pythonBackend) {
+    if (name.empty()) {
+        SPDLOG_DEBUG("Creating Mediapipe graph inputs name failed for: {}", name);
+        return StatusCode::MEDIAPIPE_GRAPH_ADD_PACKET_INPUT_STREAM;
+    }
+    SPDLOG_DEBUG("Request to passthrough:\"{}\"", name);
+    const KFSRequest* lvaluePtr = request.get();
+    MP_RETURN_ON_FAIL(graph.AddPacketToInputStream(
+                          name,
+                          ::mediapipe::packet_internal::Create(
+                              new Holder<const KFSRequest*>(lvaluePtr, request))
+                              .At(timestamp)),
+        std::string("failed to add packet to stream: ") + name, StatusCode::MEDIAPIPE_GRAPH_ADD_PACKET_INPUT_STREAM);
+    return StatusCode::OK;
+}
+
+///// utils /////
+
+// Two types of holders
+// One (HolderWithRequestOwnership) is required for streaming where it is OVMS who creates the request but it is not the packet type and we have to clean up
+// Second (HolderWithNoRequestOwnership) is required for unary-unary where it is gRPC who creates the request and musn't clean up
+// Specializations are for special case when the request itsef is the packet and we need to ensure there is no double free
+template <typename T>
+class HolderWithRequestOwnership : public ::mediapipe::packet_internal::Holder<T> {
+    std::shared_ptr<const KFSRequest> req;
+
+public:
+    explicit HolderWithRequestOwnership(const T* barePtr, const std::shared_ptr<const KFSRequest>& req) :
+        ::mediapipe::packet_internal::Holder<T>(barePtr),
+        req(req) {}
+};
+template <>
+class HolderWithRequestOwnership<const KFSRequest*> : public ::mediapipe::packet_internal::ForeignHolder<const KFSRequest*> {
+    const KFSRequest* hiddenPtr = nullptr;
+    std::shared_ptr<const KFSRequest> req;
+
+public:
+    explicit HolderWithRequestOwnership(const KFSRequest* barePtr, const std::shared_ptr<const KFSRequest>& req) :
+        ::mediapipe::packet_internal::ForeignHolder<const KFSRequest*>(&hiddenPtr),
+        hiddenPtr(barePtr),
+        req(req) {}
+};
+
+template <typename T>
+class HolderWithNoRequestOwnership : public ::mediapipe::packet_internal::Holder<T> {
+public:
+    explicit HolderWithNoRequestOwnership(const T* barePtr, const std::shared_ptr<const KFSRequest>& req) :
+        ::mediapipe::packet_internal::Holder<T>(barePtr) {}
+};
+template <>
+class HolderWithNoRequestOwnership<const KFSRequest*> : public ::mediapipe::packet_internal::ForeignHolder<const KFSRequest*> {
+public:
+    const KFSRequest* hiddenPtr = nullptr;
+    explicit HolderWithNoRequestOwnership(const KFSRequest* barePtr, const std::shared_ptr<const KFSRequest>& req) :
+        ::mediapipe::packet_internal::ForeignHolder<const KFSRequest*>(&hiddenPtr),
+        hiddenPtr(barePtr) {}
+};
+
+template <template <typename X> typename Holder>
+static Status createPacketAndPushIntoGraph(const std::string& inputName, std::shared_ptr<const KFSRequest>& request, ::mediapipe::CalculatorGraph& graph, const ::mediapipe::
+Timestamp& timestamp, const stream_types_mapping_t& inputTypes, PythonBackend* pythonBackend) {
+    auto inputPacketType = inputTypes.at(inputName);
+    ovms::Status status;
+    if (inputPacketType == mediapipe_packet_type_enum::KFS_REQUEST) {
+        SPDLOG_DEBUG("Request processing KFS passthrough: {}", inputName);
+        status = createPacketAndPushIntoGraph<Holder>(inputName, request, graph, timestamp, nullptr);
+    } else if (inputPacketType == mediapipe_packet_type_enum::TFTENSOR) {
+        SPDLOG_DEBUG("Request processing TF tensor: {}", inputName);
+        status = createPacketAndPushIntoGraph<tensorflow::Tensor, Holder>(inputName, request, graph, timestamp, nullptr);
+    } else if (inputPacketType == mediapipe_packet_type_enum::MPTENSOR) {
+        SPDLOG_DEBUG("Request processing MP tensor: {}", inputName);
+        status = createPacketAndPushIntoGraph<mediapipe::Tensor, Holder>(inputName, request, graph, timestamp, nullptr);
+    } else if (inputPacketType == mediapipe_packet_type_enum::MEDIAPIPE_IMAGE) {
+        SPDLOG_DEBUG("Request processing Mediapipe ImageFrame: {}", inputName);
+        status = createPacketAndPushIntoGraph<mediapipe::ImageFrame, Holder>(inputName, request, graph, timestamp, nullptr);
+#if (PYTHON_DISABLE == 0)
+    } else if (inputPacketType == mediapipe_packet_type_enum::OVMS_PY_TENSOR) {
+        SPDLOG_DEBUG("Request processing OVMS Python input: {}", inputName);
+        status = createPacketAndPushIntoGraph<PyObjectWrapper<py::object>, Holder>(inputName, request, graph, timestamp, pythonBackend);
+#endif
+    } else if ((inputPacketType == mediapipe_packet_type_enum::OVTENSOR) ||
+               (inputPacketType == mediapipe_packet_type_enum::UNKNOWN)) {
+        SPDLOG_DEBUG("Request processing OVTensor: {}", inputName);
+        status = createPacketAndPushIntoGraph<ov::Tensor, Holder>(inputName, request, graph, timestamp, nullptr);
+    }
+    return status;
+}
+
+///////////////////
+
+
+Status deserializeInputSidePacketsFromFirstRequestImpl(
             std::map<std::string, mediapipe::Packet>&   inputSidePackets,
     const   KFSRequest&                                 request) {
 
@@ -358,22 +490,24 @@ Status sendPacketImpl(
     return StatusCode::OK;
 }
 
-Status deserializePacketImpl(
+Status recvPacketImpl(
     std::shared_ptr<const KFSRequest>   request,
-    std::function<Status(
-        const   mediapipe::Packet&,
-        const   std::string&)>&&           fn) {
+    stream_types_mapping_t&             inputTypes,
+    PythonBackend*                      pythonBackend,
+    ::mediapipe::CalculatorGraph&       graph) {
 
-    // TODO: Timestamp
+    // TODO: Automatic timestamping mechanism
     for (const auto& input : request->inputs()) {
-        //const auto& inputName = input.name();
-        //OVMS_RETURN_ON_FAIL(createPacketAndPushIntoGraph<HolderWithRequestOwnership>(inputName, request, graph, this->currentStreamTimestamp, this->inputTypes, pythonBackend));
+        const auto& inputName = input.name();
+        auto tm = ::mediapipe::Timestamp(0);
+        auto status = createPacketAndPushIntoGraph<HolderWithRequestOwnership>(
+            inputName, request, graph, /*TODO*/tm, inputTypes, pythonBackend);
+        if (!status.ok()) {
+            return status;
+        }
     }
 
-    // TODO: Impl
-
-    mediapipe::Packet packet;
-    return fn(packet, "name");
+    return StatusCode::OK;
 }
 
 }  // namespace ovms
