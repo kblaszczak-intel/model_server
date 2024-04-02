@@ -1134,17 +1134,7 @@ template <typename RequestType, typename ResponseType>
         for (const auto& outputName : this->outputNames) {
             MP_RETURN_ON_FAIL(graph.ObserveOutputStream(outputName, [&res, &sendMutex, &outputName, this](const ::mediapipe::Packet& packet) -> absl::Status {
                 try {
-                    // Serialize
-                    // Send/Produce/Give
-
-                    // ::inference::ModelStreamInferResponse resp;
-                    // OVMS_RETURN_MP_ERROR_ON_FAIL(serializePacket(outputName, *resp.mutable_infer_response(), packet), "error in serialization");
-                    // *resp.mutable_infer_response()->mutable_model_name() = this->name;
-                    // *resp.mutable_infer_response()->mutable_model_version() = this->version;
-                    // resp.mutable_infer_response()->mutable_parameters()->operator[](MediapipeGraphExecutor::TIMESTAMP_PARAMETER_NAME).set_int64_param(packet.// Timestamp().Value());
-                    // if (!streamSynchronizedWrite(stream, streamWriterMutex, resp)) {
-                    //     return absl::Status(absl::StatusCode::kCancelled, "client disconnected");
-                    // }
+                    // API
                     std::lock_guard<std::mutex> lock(sendMutex);
                     OVMS_RETURN_MP_ERROR_ON_FAIL(sendPacketImpl(
                         this->name, this->version, outputName, this->outputTypes.at(name), packet, res),
@@ -1157,7 +1147,7 @@ template <typename RequestType, typename ResponseType>
                 "output stream observer installation", StatusCode::INTERNAL_ERROR);  // Should never happen for validated graphs
         }
 
-        // Launch
+        // API
         std::map<std::string, mediapipe::Packet> inputSidePackets;
         OVMS_RETURN_ON_FAIL(deserializeInputSidePacketsImpl(inputSidePackets, req));  // API
 #if (PYTHON_DISABLE == 0)
@@ -1202,18 +1192,44 @@ template <typename RequestType, typename ResponseType>
         //    }
         //    req = std::make_shared<::inference::ModelInferRequest>();
         //}
-        std::string name;
-        mediapipe::Packet packet;
+        // std::string name;
+        // mediapipe::Packet packet;
         // OVMS_WRITE_ERROR_ON_FAIL_AND_CONTINUE(
         //     deserializePacketImpl(req, packet),
         //     "partial deserialization of first request");
-        deserializePacketImpl(req, name, packet);
+        //deserializePacketImpl(req, name, packet);
+        auto consumeFn = [this, &graph](
+            const mediapipe::Packet&    packet,
+            const std::string&          packetName) -> Status {
+    
+            if (std::find_if(
+                this->inputNames.begin(),
+                this->inputNames.end(),
+                [&packetName](auto streamName) {
+                    return streamName == packetName;
+                }) == this->inputNames.end()) {
+                SPDLOG_DEBUG("Request for {}, contains not expected input name: {}", this->name, packetName);
+                return Status(StatusCode::INVALID_UNEXPECTED_INPUT, std::string(packetName) + " is unexpected");
+            }
+
+            // TODO: Different types of holders
+            MP_RETURN_ON_FAIL(graph.AddPacketToInputStream(packetName, packet),
+                std::string("failed to add packet to stream: ") + packetName, StatusCode::MEDIAPIPE_GRAPH_ADD_PACKET_INPUT_STREAM);
+            return StatusCode::OK;
+        };
+        deserializePacketImpl(std::shared_ptr<const KFSRequest>(&req,
+                                                      // Custom deleter to avoid deallocation by custom holder
+                                                      // Conversion to shared_ptr is required for unified deserialization method
+                                                      // for first and subsequent requests
+                                                      [](const KFSRequest*) {}),
+                              consumeFn);
 
         auto newReq = std::make_shared<RequestType>();
         while (waitForNewRequest(res, *newReq)) {
-            name.clear();
+            deserializePacketImpl(newReq, consumeFn);
+            //name.clear();
             // OVMS_WRITE_ERROR_ON_FAIL_AND_CONTINUE
-            deserializePacketImpl(*newReq, name, packet);
+            //deserializePacketImpl(*newReq, name, packet);
             // Validate next data
             // Deserialize next data
             // Recv/Consume/Take

@@ -18,6 +18,7 @@
 #include <map>
 #include <string>
 #include <memory>
+#include <functional>
 
 #include "../status.hpp"
 #include "../kfs_frontend/kfs_grpc_inference_service.hpp"
@@ -53,9 +54,10 @@ Status sendPacketImpl(
 
 // TODO: Needs to support multiple inputs, we support multiple inputs at once
 Status deserializePacketImpl(
-    const   KFSRequest&         request,
-            std::string&        name,
-            mediapipe::Packet&  packet);
+    std::shared_ptr<const KFSRequest>               request,
+    std::function<Status(
+        const   mediapipe::Packet&,
+        const   std::string&)>&&                    fn);
             // callback to fire when packet is created? TODO
 
 }  // namespace ovms

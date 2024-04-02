@@ -359,12 +359,21 @@ Status sendPacketImpl(
 }
 
 Status deserializePacketImpl(
-    const   KFSRequest&         request,
-            std::string&        name,
-            mediapipe::Packet&  packet) {
+    std::shared_ptr<const KFSRequest>   request,
+    std::function<Status(
+        const   mediapipe::Packet&,
+        const   std::string&)>&&           fn) {
 
-    // TODO: Implement
-    return StatusCode::OK;
+    // TODO: Timestamp
+    for (const auto& input : request->inputs()) {
+        //const auto& inputName = input.name();
+        //OVMS_RETURN_ON_FAIL(createPacketAndPushIntoGraph<HolderWithRequestOwnership>(inputName, request, graph, this->currentStreamTimestamp, this->inputTypes, pythonBackend));
+    }
+
+    // TODO: Impl
+
+    mediapipe::Packet packet;
+    return fn(packet, "name");
 }
 
 }  // namespace ovms
