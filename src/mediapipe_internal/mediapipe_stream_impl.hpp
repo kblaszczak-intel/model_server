@@ -65,7 +65,12 @@ Status recvPacketImpl(
     // Context for creating Python bufferprotocol packets
     PythonBackend*                                  pythonBackend,
     // This call is responsible for pushing the packets down the graph via MP API.
-    ::mediapipe::CalculatorGraph&                   graph);
+    ::mediapipe::CalculatorGraph&                   graph,
+    // Timestamp to be used if request specified no manual timestamp
+    // Implementation is also expected to leave the timestamp in next
+    // available state for usage in subsequent requests.
+    ::mediapipe::Timestamp&                         currentTimestamp
+    );
 
 
 Status validateSubsequentRequestImpl(

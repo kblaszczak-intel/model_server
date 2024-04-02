@@ -343,7 +343,8 @@ Status KFSInferenceServiceImpl::ModelStreamInferImpl(::grpc::ServerContext* cont
     if (!status.ok()) {
         return status;
     }
-    return executor->inferStream(firstRequest, *stream);
+    //return executor->inferStream(firstRequest, *stream);
+    return executor->inferEx(firstRequest, *stream);
 #else
     SPDLOG_DEBUG("Mediapipe support was disabled during build process...");
     return StatusCode::NOT_IMPLEMENTED;

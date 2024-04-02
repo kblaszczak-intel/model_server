@@ -1146,8 +1146,13 @@ template <typename RequestType, typename ResponseType>
                                                       [](const KFSRequest*) {}),
                               this->inputTypes,
                               this->pythonBackend,
-                              graph);
+                              graph,
+                              this->currentStreamTimestamp);
 
+        // Read loop
+        // Here we create ModelInferRequest with shared ownership,
+        // and move it down to custom packet holder to ensure
+        // lifetime is extended to lifetime of deserialized Packets.
         auto newReq = std::make_shared<RequestType>();
         while (waitForNewRequest(res, *newReq)) {
             // API
@@ -1161,7 +1166,8 @@ template <typename RequestType, typename ResponseType>
                 auto status = recvPacketImpl(   newReq,
                                                 this->inputTypes,
                                                 this->pythonBackend,
-                                                graph);
+                                                graph,
+                                                this->currentStreamTimestamp);
                 if (!status.ok()) {
                     std::lock_guard<std::mutex> lock(sendMutex);
                     sendErrorImpl(res, status.string());

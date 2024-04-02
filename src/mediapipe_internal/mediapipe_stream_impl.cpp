@@ -490,22 +490,52 @@ Status sendPacketImpl(
     return StatusCode::OK;
 }
 
+static Status deserializeTimestampIfAvailable(
+    const KFSRequest& request,
+    ::mediapipe::Timestamp& timestamp) {
+    static const std::string TIMESTAMP_PARAMETER_NAME = "OVMS_MP_TIMESTAMP";
+    auto timestampParamIt = request.parameters().find(TIMESTAMP_PARAMETER_NAME);
+    if (timestampParamIt != request.parameters().end()) {
+        SPDLOG_DEBUG("Found {} timestamp parameter in request for: {}", TIMESTAMP_PARAMETER_NAME, request.model_name());
+        auto& parameterChoice = timestampParamIt->second;
+        if (parameterChoice.parameter_choice_case() == inference::InferParameter::ParameterChoiceCase::kInt64Param) {
+            // Cannot create with error checking since error check = abseil death test
+            timestamp = ::mediapipe::Timestamp::CreateNoErrorChecking(parameterChoice.int64_param());
+            if (!timestamp.IsRangeValue()) {
+                SPDLOG_DEBUG("Timestamp not in range: {}; for request to: {};", timestamp.DebugString(), request.model_name());
+                return Status(StatusCode::MEDIAPIPE_INVALID_TIMESTAMP, timestamp.DebugString());
+            }
+        } else {
+            auto status = Status(StatusCode::MEDIAPIPE_INVALID_TIMESTAMP, "Invalid timestamp format in request parameter OVMS_MP_TIMESTAMP. Should be int64");
+            SPDLOG_DEBUG(status.string());
+            return status;
+        }
+    }
+    return StatusCode::OK;
+}
+
 Status recvPacketImpl(
     std::shared_ptr<const KFSRequest>   request,
     stream_types_mapping_t&             inputTypes,
     PythonBackend*                      pythonBackend,
-    ::mediapipe::CalculatorGraph&       graph) {
+    ::mediapipe::CalculatorGraph&       graph,
+    ::mediapipe::Timestamp&             currentTimestamp) {
 
-    // TODO: Automatic timestamping mechanism
+    auto status = deserializeTimestampIfAvailable(*request, currentTimestamp);
+    if (!status.ok()) {
+        return status;
+    }
+
     for (const auto& input : request->inputs()) {
         const auto& inputName = input.name();
-        auto tm = ::mediapipe::Timestamp(0);
         auto status = createPacketAndPushIntoGraph<HolderWithRequestOwnership>(
-            inputName, request, graph, /*TODO*/tm, inputTypes, pythonBackend);
+            inputName, request, graph, currentTimestamp, inputTypes, pythonBackend);
         if (!status.ok()) {
             return status;
         }
     }
+
+    currentTimestamp = currentTimestamp.NextAllowedInStream();
 
     return StatusCode::OK;
 }

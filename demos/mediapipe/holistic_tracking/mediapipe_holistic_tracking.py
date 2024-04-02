@@ -88,6 +88,19 @@ if __name__ == '__main__':
 
     processing_times = np.zeros((0),int)
 
+    TIMESTAMP_PARAM_NAME = 'OVMS_MP_TIMESTAMP'
+
+    def callback(result, error):
+        if error:
+            raise error
+        output = result.as_numpy(output_name)
+        out = cv2.cvtColor(output, cv2.COLOR_RGB2BGR)
+        timestamp = result.get_response().parameters[TIMESTAMP_PARAM_NAME].int64_param
+        print(timestamp)
+        cv2.imwrite("image_" + str(timestamp) + "_stream.jpg", out)
+        
+    triton_client.start_stream(callback=callback)
+
     for line in lines:
         inputs = []
         if not os.path.exists(line.strip()):
@@ -101,19 +114,14 @@ if __name__ == '__main__':
         
         inputs[0].set_data_from_numpy(img)
         start_time = datetime.datetime.now()
-        results = triton_client.infer(model_name=graph_name,
-                                  inputs=inputs,
-                                  outputs=outputs)
+        #results = triton_client.infer(model_name=graph_name,
+        #                          inputs=inputs,
+        #                          outputs=outputs)
+        triton_client.async_stream_infer(graph_name, inputs)
         end_time = datetime.datetime.now()
         duration = (end_time - start_time).total_seconds() * 1000
         processing_times = np.append(processing_times,np.array([int(duration)]))
-        output = results.as_numpy(output_name)
-        nu = np.array(output)
+        #output = results.as_numpy(output_name)
+        #nu = np.array(output)
 
-        print('Iteration {}; Processing time: {:.2f} ms; speed {:.2f} fps'.format(iteration,round(np.average(duration), 2),
-                                                                                      round(1000 / np.average(duration), 2)
-                                                                                      ))
-        out = cv2.cvtColor(output, cv2.COLOR_RGB2BGR)
-        cv2.imwrite("image_" + str(iteration) + ".jpg", out)
-        print("Results saved to :"+ "image_" + str(iteration) + ".jpg")
         iteration = iteration + 1
