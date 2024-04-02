@@ -48,8 +48,7 @@ bool waitForNewRequest(
     KFSRequest&             newRequest);
 
 // Supports only 1 output, each output is sent separately
-// Maybe be called from different threads, requires synchronization.
-// For now the synchronization is automatic, in graph executor
+// Synchronized at graph execution level
 Status sendPacketImpl(
     const   std::string&                endpointName,
     const   std::string&                endpointVersion,
@@ -61,8 +60,24 @@ Status sendPacketImpl(
 // Deserialization and pushing into the graph
 Status recvPacketImpl(
     std::shared_ptr<const KFSRequest>               request,
+    // inputName=>type mapping, request is able to contain multiple packets
     stream_types_mapping_t&                         inputTypes,
+    // Context for creating Python bufferprotocol packets
     PythonBackend*                                  pythonBackend,
+    // This call is responsible for pushing the packets down the graph via MP API.
     ::mediapipe::CalculatorGraph&                   graph);
+
+
+Status validateSubsequentRequestImpl(
+    const KFSRequest& request,
+    const std::string& endpointName,
+    const std::string& endpointVersion,
+    stream_types_mapping_t& inputTypes);
+
+
+// Synchronized at graph execution level
+Status sendErrorImpl(
+    KFSServerReaderWriter& serverReaderWriter,
+    const std::string& message);
 
 }  // namespace ovms

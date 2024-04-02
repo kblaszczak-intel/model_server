@@ -510,4 +510,37 @@ Status recvPacketImpl(
     return StatusCode::OK;
 }
 
+Status validateSubsequentRequestImpl(
+    const KFSRequest& request,
+    const std::string& endpointName,
+    const std::string& endpointVersion,
+    stream_types_mapping_t& inputTypes) {
+
+    if (request.model_name() != endpointName) {
+        return StatusCode::MEDIAPIPE_INCORRECT_SERVABLE_NAME;
+    }
+    if (request.model_version() != endpointVersion &&
+        request.model_version() != "0" &&    // default version does not matter for user
+        !request.model_version().empty()) {  // empty the same as default
+        return StatusCode::MEDIAPIPE_INCORRECT_SERVABLE_VERSION;
+    }
+
+    return StatusCode::OK;
+}
+
+Status sendErrorImpl(
+    KFSServerReaderWriter& serverReaderWriter,
+    const std::string& message) {
+
+    ::inference::ModelStreamInferResponse resp;
+    *resp.mutable_error_message() = message;
+
+    if (serverReaderWriter.Write(resp)) {
+        return StatusCode::OK;
+    }
+
+    return Status(StatusCode::UNKNOWN_ERROR, "error during sending an error response");
+}
+
+
 }  // namespace ovms

@@ -1097,29 +1097,6 @@ Status MediapipeGraphExecutor::serializePacket(const std::string& name, ::infere
     return status;
 }
 
-// static Status sendPacketImpl(
-//     const   std::string&            endpointName,
-//     const   std::string&            endpointVersion,
-//     const   std::string&            packetName,
-//     const   ::mediapipe::Packet&    packet,
-//             KFSServerReaderWriter&  serverReaderWriter) {
-
-//     KFSStreamResponse resp;
-
-//     // OVMS_RETURN_ON_FAIL(
-//     //     serializePacket(packetName, *resp.mutable_infer_response(), packet));
-
-//     static const std::string TIMESTAMP_PARAMETER_NAME{"OVMS_MP_TIMESTAMP"};  // TODO
-//     *resp.mutable_infer_response()->mutable_model_name() = endpointName;
-//     *resp.mutable_infer_response()->mutable_model_version() = endpointVersion;
-//     resp.mutable_infer_response()->mutable_parameters()->operator[](TIMESTAMP_PARAMETER_NAME).set_int64_param(packet.Timestamp().Value());
-
-//     if (!serverReaderWriter.Write(resp)) {
-//         return Status(StatusCode::UNKNOWN_ERROR, "client disconnected");
-//     }
-
-//     return StatusCode::OK;
-// }
 
 template <typename RequestType, typename ResponseType>
     Status MediapipeGraphExecutor::inferEx(const RequestType& req, ResponseType& res) {
@@ -1173,14 +1150,31 @@ template <typename RequestType, typename ResponseType>
 
         auto newReq = std::make_shared<RequestType>();
         while (waitForNewRequest(res, *newReq)) {
-            // TODO: Validate?
-            // Deserialize subsequent request
             // API
-            recvPacketImpl(
-                newReq,
-                this->inputTypes,
-                this->pythonBackend,
-                graph);
+            auto pstatus = validateSubsequentRequestImpl(
+                *newReq,
+                this->name,
+                this->version,
+                this->inputTypes);
+            
+            if (pstatus.ok()) {
+                auto status = recvPacketImpl(   newReq,
+                                                this->inputTypes,
+                                                this->pythonBackend,
+                                                graph);
+                if (!status.ok()) {
+                    std::lock_guard<std::mutex> lock(sendMutex);
+                    sendErrorImpl(res, status.string());
+                }
+            } else {
+                std::lock_guard<std::mutex> lock(sendMutex);
+                sendErrorImpl(res, pstatus.string());
+            }
+            
+            if (graph.HasError()) {
+                SPDLOG_DEBUG("Graph {}: encountered an error, stopping the execution", this->name);
+                break;
+            }
 
             newReq = std::make_shared<RequestType>();
         }
