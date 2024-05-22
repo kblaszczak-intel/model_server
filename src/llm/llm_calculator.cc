@@ -24,10 +24,14 @@
 #include <continuous_batching_pipeline.hpp>
 #include <generation_handle.hpp>
 #include <openvino/openvino.hpp>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
 
 #include "llmnoderesources.hpp"
 #include "src/kfserving_api/grpc_predict_v2.grpc.pb.h"
 #include "src/kfserving_api/grpc_predict_v2.pb.h"
+
+using namespace rapidjson;
 
 using KFSRequest = inference::ModelInferRequest;
 using KFSResponse = inference::ModelInferResponse;
@@ -43,7 +47,17 @@ class LLMCalculator : public CalculatorBase {
 
 public:
     static absl::Status GetContract(CalculatorContract* cc) {
-        LOG(INFO) << "LLMCalculator [Node: " << cc->GetNodeName() << "] GetContract start";
+        StringBuffer buffer;
+        Writer<StringBuffer> writer(buffer);
+
+        writer.StartObject();
+
+        writer.String("id");  // create Id property
+        writer.Int(3);        // write the Id value from the object instance
+
+        writer.EndObject();
+
+        LOG(INFO) << "LLMCalculator [Node: " << cc->GetNodeName() << "] GetContract start --" << buffer.GetString();
         RET_CHECK(!cc->Inputs().GetTags().empty());
         RET_CHECK(!cc->Outputs().GetTags().empty());
 
@@ -74,8 +88,21 @@ public:
         return absl::OkStatus();
     }
 
+    // greedy (no params)
+    // beam-search (num groups, num beams, penalties)
+    // random sampling - in-progress (top-p top-k)
     absl::Status Process(CalculatorContext* cc) final {
-        LOG(INFO) << "LLMCalculator [Node: " << cc->NodeName() << "] Process start";
+        StringBuffer buffer;
+        Writer<StringBuffer> writer(buffer);
+
+        writer.StartObject();
+
+        writer.String("id");  // create Id property
+        writer.Int(3);        // write the Id value from the object instance
+
+        writer.EndObject();
+
+        LOG(INFO) << "LLMCalculator [Node: " << cc->NodeName() << "] Process start: --" << buffer.GetString() << "--";
         try {
             const KFSRequest* request = cc->Inputs().Tag("REQUEST").Get<const KFSRequest*>();
             // Hardcoded single input for data
