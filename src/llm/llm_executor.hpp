@@ -70,7 +70,9 @@ class LLMExecutorWrapper {
                     llmExecutor->waitForRequests(receivedEndSignal);
                 }
             } catch (std::exception& e) {
+                std::cout << "Exception caught: " << e.what() << std::endl;
                 SPDLOG_LOGGER_ERROR(llm_executor_logger, "Error occurred in LLM executor: {}.", e.what());
+                throw(e);
             }
         }
     }
