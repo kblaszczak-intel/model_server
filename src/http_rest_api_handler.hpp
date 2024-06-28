@@ -219,6 +219,7 @@ public:
 
     Status processV3(const std::string_view uri, const HttpRequestComponents& request_components, std::string& response, const std::string& request_body, tensorflow::serving::net_http::ServerRequestInterface* writer);
 
+    Status processV3POC(const std::string_view uri, const HttpRequestComponents& request_components, std::string& response, const std::string& request_body, tensorflow::serving::net_http::ServerRequestInterface* writer);
 private:
     const std::regex predictionRegex;
     const std::regex modelstatusRegex;

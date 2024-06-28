@@ -40,6 +40,8 @@
 #include "model.hpp"
 #include "status.hpp"
 
+#include "llm/llm_executor.hpp"
+
 namespace ovms {
 
 const uint32_t DEFAULT_WAIT_FOR_MODEL_LOADED_TIMEOUT_MS = 10000;
@@ -56,6 +58,20 @@ class MediapipeGraphExecutor;
 struct FunctorSequenceCleaner;
 struct FunctorResourcesCleaner;
 class PythonBackend;
+
+struct LLMConfig {
+    std::string name;
+    std::string modelsPath;
+    size_t cacheSize;
+
+    Status parseNode(const rapidjson::Value& v) {
+        name = v["name"].GetString();
+        modelsPath = v["models_path"].GetString();
+        cacheSize = v["cache_size"].GetUint64();
+        return StatusCode::OK;
+    }
+};
+
 /**
  * @brief Model manager is managing the list of model topologies enabled for serving and their versions.
  */
@@ -78,6 +94,9 @@ protected:
      * 
      */
     std::map<std::string, std::shared_ptr<Model>> models;
+
+    std::map<std::string, std::shared_ptr<LLMExecutorWrapper>> llms;
+
     std::unique_ptr<ov::Core> ieCore;
 
     PipelineFactory pipelineFactory;
@@ -101,6 +120,8 @@ private:
     Status reloadModelVersions(std::shared_ptr<ovms::Model>& model, std::shared_ptr<FileSystem>& fs, ModelConfig& config, std::shared_ptr<model_versions_t>& versionsToReload, std::shared_ptr<model_versions_t>& versionsFailed);
     Status addModelVersions(std::shared_ptr<ovms::Model>& model, std::shared_ptr<FileSystem>& fs, ModelConfig& config, std::shared_ptr<model_versions_t>& versionsToStart, std::shared_ptr<model_versions_t>& versionsFailed);
     Status loadModels(const rapidjson::Value::MemberIterator& modelsConfigList, std::vector<ModelConfig>& gatedModelConfigs, std::set<std::string>& modelsInConfigFile, std::set<std::string>& modelsWithInvalidConfig, std::unordered_map<std::string, ModelConfig>& newModelConfigs, const std::string& rootDirectoryPath);
+    Status loadLlm(LLMConfig& llmConfig);
+    Status loadLlms(const rapidjson::Value::MemberIterator& llmConfigList);
 #if (MEDIAPIPE_DISABLE == 0)
     Status processMediapipeConfig(const MediapipeGraphConfig& config, std::set<std::string>& mediapipesInConfigFile, MediapipeFactory& factory);
     Status loadMediapipeGraphsConfig(std::vector<MediapipeGraphConfig>& mediapipesInConfigFile);
@@ -108,6 +129,7 @@ private:
 #else
     Status loadModelsConfig(rapidjson::Document& configJson, std::vector<ModelConfig>& gatedModelConfigs);
 #endif
+    Status loadLlmConfig(rapidjson::Document& configJson);
     Status tryReloadGatedModelConfigs(std::vector<ModelConfig>& gatedModelConfigs);
     Status loadCustomNodeLibrariesConfig(rapidjson::Document& configJson);
     Status loadPipelinesConfig(rapidjson::Document& configJson);
@@ -232,6 +254,8 @@ private:
     void setRootDirectoryPath(const std::string& configFileFullPath);
 
 public:
+
+    std::shared_ptr<LLMExecutorWrapper> getLlmExecutor(std::string modelName);
     /**
      * @brief Get the full path from relative or full path
      *

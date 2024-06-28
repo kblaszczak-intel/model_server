@@ -816,6 +816,65 @@ Status ModelManager::loadModelsConfig(rapidjson::Document& configJson, std::vect
     return firstErrorStatus;
 }
 
+Status ModelManager::loadLlm(LLMConfig& llmConfig) {
+    SPDLOG_LOGGER_DEBUG(modelmanager_logger, "Loading LLM model {}", llmConfig.name);
+    SchedulerConfig schedulerConfig = {
+        .max_num_batched_tokens = 256,
+        .cache_size = llmConfig.cacheSize,
+        .block_size = 32,
+        .dynamic_split_fuse = true,
+        .max_num_seqs = 256,
+    };
+
+    std::string device = "CPU";
+    std::map<std::string, ov::Any> pluginConfig = {};
+
+    /*auto status = JsonParser::parsePluginConfig(nodeOptions.plugin_config(), nodeResources->pluginConfig);
+    if (!status.ok()) {
+        SPDLOG_ERROR("Error during llm node plugin_config option parsing to JSON: {}", nodeOptions.plugin_config());
+        return status;
+    }*/
+
+    std::shared_ptr<ContinuousBatchingPipeline> cbPipe = std::make_shared<ContinuousBatchingPipeline>(llmConfig.modelsPath, schedulerConfig, device, pluginConfig);
+    std::shared_ptr<LLMExecutorWrapper> llmExecutorWrapper = std::make_shared<LLMExecutorWrapper>(cbPipe);
+    this->llms.insert({llmConfig.name, llmExecutorWrapper});
+    SPDLOG_LOGGER_DEBUG(modelmanager_logger, "LLM model {} loaded", llmConfig.name);
+    return StatusCode::OK;
+}
+
+std::shared_ptr<LLMExecutorWrapper> ModelManager::getLlmExecutor(std::string modelName) {
+    // Unsafe access
+    return this->llms.at(modelName);
+}
+
+Status ModelManager::loadLlms(const rapidjson::Value::MemberIterator& llmConfigList) {
+    SPDLOG_LOGGER_DEBUG(modelmanager_logger, "Loading LLM models");
+    Status firstErrorStatus = StatusCode::OK;
+
+    for (const auto& config : llmConfigList->value.GetArray()) {
+        LLMConfig llmConfig;
+        auto status = llmConfig.parseNode(config);
+        status = loadLlm(llmConfig);
+        IF_ERROR_NOT_OCCURRED_EARLIER_THEN_SET_FIRST_ERROR(status);
+    }
+    return firstErrorStatus;
+}
+
+Status ModelManager::loadLlmConfig(rapidjson::Document& configJson) {
+    SPDLOG_LOGGER_DEBUG(modelmanager_logger, "Loading LLM config");
+    Status firstErrorStatus = StatusCode::OK;
+    const auto itr = configJson.FindMember("llm_config_list");
+
+    if (itr == configJson.MemberEnd() || !itr->value.IsArray()) {
+        SPDLOG_LOGGER_ERROR(modelmanager_logger, "Configuration file doesn't have LLMs property.");
+        return StatusCode::JSON_INVALID;
+    }
+    
+    loadLlms(itr);
+    return firstErrorStatus;
+}
+
+
 Status ModelManager::tryReloadGatedModelConfigs(std::vector<ModelConfig>& gatedModelConfigs) {
     Status firstErrorStatus = StatusCode::OK;
     for (auto& modelConfig : gatedModelConfigs) {
@@ -932,6 +991,11 @@ Status ModelManager::loadConfig(const std::string& jsonFilename) {
     Status firstErrorStatus = StatusCode::OK;
 
     this->setRootDirectoryPath(jsonFilename);
+
+    status = loadLlmConfig(configJson);
+    if (!status.ok()) {
+        IF_ERROR_NOT_OCCURRED_EARLIER_THEN_SET_FIRST_ERROR(status);
+    }
 
     // load the custom loader config, if available
     status = loadCustomLoadersConfig(configJson);

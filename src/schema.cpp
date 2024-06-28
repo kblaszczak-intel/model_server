@@ -340,6 +340,22 @@ const std::string MODELS_CONFIG_SCHEMA = R"({
                 }
             ]
         },
+	"llm_config": {
+        "type": "object",
+        "required": ["name", "models_path"],
+        "properties": {
+             "name": {
+                 "type": "string"
+             },
+             "models_path": {
+                 "type": "string"
+             },
+             "cache_size": {
+                 "type": "integer"
+             }
+        },
+        "additionalProperties": false
+    },
     "mediapipe_config": {
         "type": "object",
         "required": ["name"],
@@ -373,6 +389,12 @@ const std::string MODELS_CONFIG_SCHEMA = R"({
 			"type": "array",
 			"items": {
 				"$ref": "#/definitions/model_config"
+			}
+		},
+		"llm_config_list": {
+			"type": "array",
+			"items": {
+				"$ref": "#/definitions/llm_config"
 			}
 		},
         "pipeline_config_list": {

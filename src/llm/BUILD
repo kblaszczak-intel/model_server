@@ -38,25 +38,6 @@ cc_library(
     alwayslink = 1,
 )
 
-cc_library(
-    name = "llmcalculator",
-    srcs = ["llm_calculator.cc", "http_llm_calculator.cc"],
-    deps = [
-        "@linux_openvino//:openvino",
-        "@mediapipe//mediapipe/framework:calculator_framework",
-        "@com_github_tencent_rapidjson//:rapidjson",
-        "//src/kfserving_api:kfserving_api_cpp",
-        "//src:libovmsprofiler",
-        ":llm_engine",
-        ":llmnoderesources",
-        ":httppayload",
-    ],
-    visibility = ["//visibility:public"],
-    copts = COPTS_ADJUSTED,
-    linkopts = LINKOPTS_ADJUSTED,
-    alwayslink = 1,
-)
-
 mediapipe_proto_library(
     name = "llmcalculator_proto", # llmcalculator_cc_proto - just mediapipe stuff with mediapipe_proto_library adding nonvisible target
     srcs = ["llm_calculator.proto"],
@@ -83,6 +64,11 @@ cc_library(
         "llmcalculator_cc_proto",
         ":llm_engine",
         "//src/python:utils",
+        "@tensorflow_serving//tensorflow_serving/util/net_http/server/public:http_server",
+        "@tensorflow_serving//tensorflow_serving/util/net_http/server/public:http_server_api",
+        "@tensorflow_serving//tensorflow_serving/util:threadpool_executor",
+        "@tensorflow_serving//tensorflow_serving/util:json_tensor",
+        ":httppayload",
     ] + PYBIND_DEPS,
     visibility = ["//visibility:public"],
     local_defines = COMMON_LOCAL_DEFINES,

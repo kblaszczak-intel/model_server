@@ -29,23 +29,13 @@
 #include "mediapipe/framework/calculator_graph.h"
 #pragma GCC diagnostic pop
 
-#include <pybind11/embed.h>  // everything needed for embedding
-#include <pybind11/stl.h>
-
 #include "src/python/utils.hpp"
 
 namespace ovms {
-class Status;
-class LLMExecutorWrapper;
 
 using plugin_config_t = std::map<std::string, ov::Any>;
-
-struct TextProcessor {
-    std::string bosToken = "";
-    std::string eosToken = "";
-    std::unique_ptr<PyObjectWrapper<py::object>> chatTemplate = nullptr;
-};
-
+class Status;
+class LLMExecutorWrapper;
 struct LLMNodeResources {
 public:
     std::shared_ptr<ContinuousBatchingPipeline> cbPipe = nullptr;
@@ -53,7 +43,6 @@ public:
     std::string device;
     plugin_config_t pluginConfig;
     SchedulerConfig schedulerConfig;
-    TextProcessor textProcessor;
 
     static Status createLLMNodeResources(std::shared_ptr<LLMNodeResources>& nodeResources, const ::mediapipe::CalculatorGraphConfig::Node& graphNode, std::string graphPath);
 

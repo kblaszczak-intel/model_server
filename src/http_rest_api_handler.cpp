@@ -200,7 +200,8 @@ void HttpRestApiHandler::registerAll() {
 
     registerHandler(V3, [this](const std::string_view uri, const HttpRequestComponents& request_components, std::string& response, const std::string& request_body, HttpResponseComponents& response_components, tensorflow::serving::net_http::ServerRequestInterface* serverReaderWriter) -> Status {
         OVMS_PROFILE_FUNCTION();
-        return processV3(uri, request_components, response, request_body, serverReaderWriter);
+        return processV3POC(uri, request_components, response, request_body, serverReaderWriter);
+        //return processV3(uri, request_components, response, request_body, serverReaderWriter);
     });
     registerHandler(Metrics, [this](const std::string_view uri, const HttpRequestComponents& request_components, std::string& response, const std::string& request_body, HttpResponseComponents& response_components, tensorflow::serving::net_http::ServerRequestInterface*) -> Status {
         return processMetrics(request_components, response, request_body);
@@ -528,6 +529,65 @@ Status HttpRestApiHandler::processV3(const std::string_view uri, const HttpReque
     SPDLOG_DEBUG("Mediapipe support was disabled during build process...");
     return StatusCode::NOT_IMPLEMENTED;
 #endif
+}
+
+
+Status HttpRestApiHandler::processV3POC(const std::string_view uri, const HttpRequestComponents& request_components, std::string& response, const std::string& request_body, tensorflow::serving::net_http::ServerRequestInterface* serverReaderWriter) {
+    OVMS_PROFILE_FUNCTION();
+    HttpPayload request;
+    Document doc;
+    bool streamFieldVal = false;
+    OVMS_PROFILE_SCOPE("rapidjson parse body");
+    doc.Parse(request_body.c_str());
+
+    if (doc.HasParseError()) {
+        return Status(StatusCode::JSON_INVALID, "Cannot parse JSON body");
+    }
+
+    if (!doc.IsObject()) {
+        return Status(StatusCode::JSON_INVALID, "JSON body must be an object");
+    }
+
+    auto modelNameIt = doc.FindMember("model");
+    if (modelNameIt == doc.MemberEnd()) {
+        return Status(StatusCode::JSON_INVALID, "\"model\" field is missing in JSON body");
+    }
+
+    if (!modelNameIt->value.IsString()) {
+        return Status(StatusCode::JSON_INVALID, "\"model\" field is not a string");
+    }
+
+    const std::string model_name = modelNameIt->value.GetString();
+
+    auto streamIt = doc.FindMember("stream");
+    if (streamIt != doc.MemberEnd()) {
+        if (!streamIt->value.IsBool()) {
+            return Status(StatusCode::JSON_INVALID, "\"stream\" field is not a boolean");
+        }
+        streamFieldVal = streamIt->value.GetBool();
+    }
+
+    std::shared_ptr<LLMExecutorWrapper> executor = this->modelManager.getLlmExecutor(model_name);
+
+    // TODO: Possibly avoid making copy
+    request.headers = request_components.headers;
+    request.body = request_body;
+    request.parsedJson = &doc;
+    request.uri = std::string(uri);
+    if (streamFieldVal == false) {
+        executor->infer(request, response);
+        return StatusCode::OK;
+    } else {
+        serverReaderWriter->OverwriteResponseHeader("Content-Type", "text/event-stream");
+        serverReaderWriter->OverwriteResponseHeader("Cache-Control", "no-cache");
+        serverReaderWriter->OverwriteResponseHeader("Connection", "keep-alive");
+        auto status = executor->inferStream(request, serverReaderWriter);
+        //if (!status.ok()) {
+        //    sendErrorImpl(status.string(), *serverReaderWriter);
+        //}
+        serverReaderWriter->PartialReplyEnd();
+        return StatusCode::PARTIAL_END;
+    }
 }
 
 Status HttpRestApiHandler::processMetrics(const HttpRequestComponents& request_components, std::string& response, const std::string& request_body) {
