@@ -514,11 +514,17 @@ public:
             // Unary scenario
             if (!this->request->isStream()) {
                 OVMS_PROFILE_SCOPE("Unary generation cycle");
+
+                this->client->installDisconnectionCallback([genHandle = this->generationHandle]() {
+                    genHandle->drop();
+                });
+
                 std::vector<ov::genai::GenerationOutput> generationOutput = this->generationHandle->read_all();
                 RET_CHECK(generationOutput.size() >= 1);
                 std::sort(generationOutput.begin(), generationOutput.end(), [](ov::genai::GenerationOutput& r1, ov::genai::GenerationOutput& r2) {
                     return r1.score > r2.score;
                 });
+
                 // legacy
                 if (generationOutput.size() == 1) {
                     std::vector<int64_t> tokens = generationOutput[0].generated_token_ids;

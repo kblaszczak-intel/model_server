@@ -34,6 +34,10 @@ public:
     bool isDisconnected() const override {
         return this->serverReaderWriter->IsDisconnected();
     }
+
+    void installDisconnectionCallback(std::function<void()> fn) override {
+        serverReaderWriter->RegisterDisconnectionCallback(std::move(fn));
+    }
 };
 
 }
