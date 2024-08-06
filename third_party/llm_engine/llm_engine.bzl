@@ -20,7 +20,7 @@ def llm_engine():
     new_git_repository(
         name = "llm_engine",
         remote = "https://github.com/dkalinowski/openvino.genai",
-        commit = "960e7f963043bd97accf95783e29662edd5ea5cf",
+        commit = "f5efbd44e17f34b73379e23e808139f569c75e08",
         build_file = "@_llm_engine//:BUILD",
         init_submodules = True,
         recursive_init_submodules = True,
@@ -105,11 +105,11 @@ cmake(
     out_include_dir = "runtime/include",
     # linking order
     out_shared_libs = [
-            "libopenvino_genai.so.2430",
+            "libopenvino_genai.so.2440",
         ],
     tags = ["requires-network"],
     visibility = ["//visibility:public"],
-    lib_name = "libopenvino_genai.so.2430",
+    lib_name = "libopenvino_genai.so.2440",
 )
 
 cc_library(

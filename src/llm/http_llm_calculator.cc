@@ -520,6 +520,9 @@ public:
                 });
 
                 std::vector<ov::genai::GenerationOutput> generationOutput = this->generationHandle->read_all();
+                if (this->generationHandle->get_status() == ov::genai::GenerationStatus::DROPPED_BY_HANDLE) {
+                    return absl::CancelledError();
+                }
                 RET_CHECK(generationOutput.size() >= 1);
                 std::sort(generationOutput.begin(), generationOutput.end(), [](ov::genai::GenerationOutput& r1, ov::genai::GenerationOutput& r2) {
                     return r1.score > r2.score;
@@ -556,7 +559,7 @@ public:
                 // Each iteration is single execution of Process() method
 
                 if (this->client->isDisconnected()) {
-                    return absl::OkStatus();
+                    return absl::CancelledError();
                 }
                 
                 if (this->generationHandle->get_status() == ov::genai::GenerationStatus::RUNNING || this->generationHandle->can_read()) {
